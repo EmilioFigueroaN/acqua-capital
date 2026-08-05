@@ -389,14 +389,10 @@ function buildData(masterRows, facturaRows){
   });
 
   const ejecutivos = Array.from(execSet).sort((a,b)=>a.localeCompare(b,'es'));
-  const sortedMonths = Array.from(monthSet).sort();
-  let current_month;
-  if(sortedMonths.length === 0){
-    const now = new Date();
-    current_month = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  } else {
-    current_month = sortedMonths[sortedMonths.length - 1];
-  }
+
+  // Mes en curso = mes calendario de HOY (se actualiza solo al cambiar de mes)
+  const now = new Date();
+  const current_month = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const months = [shiftMonth(current_month,-2), shiftMonth(current_month,-1), current_month];
   const month_labels = {};
   months.forEach(m => { month_labels[m] = labelMonth(m); });
