@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Dashboard ejecutivo de operaciones de factoring: resumen por ejecutivo, desempeño del mes en curso y estado de facturas.">
+<meta name="theme-color" content="#151b2b">
+<meta name="robots" content="noindex, nofollow">
 <title>Dashboard de Factoring — Resumen Ejecutivo</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
@@ -19,6 +22,9 @@
     --gold-soft:#e4cd9a;
     --rose:#a8503f;
     --white:#fffdf8;
+    --acqua:#1f6f9c;
+    --acqua-deep:#155174;
+    --focus-ring:#3b82c4;
     --shadow: 0 2px 14px rgba(21,27,43,0.08);
   }
   *{box-sizing:border-box;}
@@ -186,16 +192,29 @@
   letter-spacing:.02em;
   transition:background .15s, transform .1s;
 }
-.btn-refresh:hover{ background:#0e6b63; }
+.btn-refresh:hover{ background:var(--acqua-deep); }
 .btn-refresh:active{ transform:scale(.98); }
 .btn-refresh:disabled{ opacity:.55; cursor:wait; }
+.btn-refresh:focus-visible,
+select#execFilter:focus-visible{
+  outline:2px solid var(--focus-ring);
+  outline-offset:2px;
+}
 .load-status{
   font-size:12px;
   color:var(--ink-soft);
   margin-left:8px;
 }
 .load-status.ok{ color:var(--acqua); }
-.load-status.err{ color:#b33; }
+.load-status.err{ color:#b33; font-weight:600; }
+
+/* Impresión / exportación a PDF: quita elementos interactivos y ajusta contraste */
+@media print{
+  .filterbar select, .btn-refresh, .load-status{ display:none; }
+  .hero{ background:var(--ink) !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  section.block{ page-break-inside:avoid; }
+  body{ background:#fff; }
+}
 
 </style>
 </head>
@@ -217,10 +236,10 @@
 
   <div class="filterbar">
     <label for="execFilter">Ejecutivo</label>
-    <select id="execFilter"></select>
-    <span class="filter-tag" id="filterTag">Mostrando todos los ejecutivos</span>
-    <button type="button" id="btnRefresh" class="btn-refresh" title="Volver a leer los CSV">↻ Actualizar desde CSV</button>
-    <span class="load-status" id="loadStatus"></span>
+    <select id="execFilter" aria-label="Filtrar por ejecutivo"></select>
+    <span class="filter-tag" id="filterTag" aria-live="polite">Mostrando todos los ejecutivos</span>
+    <button type="button" id="btnRefresh" class="btn-refresh" title="Volver a leer los CSV" aria-label="Actualizar datos desde los archivos CSV">↻ Actualizar desde CSV</button>
+    <span class="load-status" id="loadStatus" role="status" aria-live="polite"></span>
   </div>
 
   <!-- SECTION 1 -->
@@ -268,7 +287,7 @@
     <div class="notes" id="notesFacturas"></div>
   </section>
 
-  <footer>Dashboard generado a partir de los archivos fuente. Todos los montos en pesos chilenos (CLP), sin decimales.</footer>
+  <footer>Dashboard generado a partir de los archivos fuente. Todos los montos en pesos chilenos (CLP), sin decimales. · Uso interno — Acqua Capital.</footer>
 </div>
 
 <script>
@@ -279,8 +298,24 @@
      reporteFacturasNuevas.csv
    ============================================================ */
 
+'use strict';
+
 const CSV_MASTER   = 'reporte_factoring_master.csv';
 const CSV_FACTURAS = 'reporteFacturasNuevas.csv';
+
+/**
+ * Escapa caracteres HTML especiales. Los valores de los CSV (nombres de
+ * ejecutivos, razones sociales, encabezados de columnas, etc.) se insertan
+ * en el DOM vía innerHTML; sin este escape, un CSV con contenido malicioso
+ * (ej. "<img src=x onerror=...>") podría ejecutar código en el navegador
+ * del usuario. Todo valor de texto proveniente de los archivos fuente debe
+ * pasar por esta función antes de insertarse en una plantilla HTML.
+ */
+function escapeHtml(value){
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
 
 const MONTH_NAMES = {
   '01':'Enero','02':'Febrero','03':'Marzo','04':'Abril',
@@ -537,11 +572,12 @@ function setupFilter(){
   const sel = document.getElementById('execFilter');
   const prev = currentExec;
   sel.innerHTML = `<option value="ALL">Todos los ejecutivos</option>` +
-    DATA.ejecutivos.map(e => `<option value="${e}">${e}</option>`).join('');
+    DATA.ejecutivos.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
   if([...sel.options].some(o => o.value === prev)) sel.value = prev;
   else { sel.value = 'ALL'; currentExec = 'ALL'; }
   sel.onchange = () => {
     currentExec = sel.value;
+    // textContent (no innerHTML) ya es seguro frente a inyección de HTML
     document.getElementById('filterTag').textContent =
       currentExec === 'ALL' ? 'Mostrando todos los ejecutivos' : 'Filtrado por: ' + currentExec;
     renderAll();
@@ -577,7 +613,7 @@ function renderResumen(){
   execs.forEach(e => {
     const eData = DATA.summary.ejecutivos[e];
     if(!eData) return;
-    body += `<tr><td class="left">${e}</td>`;
+    body += `<tr><td class="left">${escapeHtml(e)}</td>`;
     months.forEach(m => {
       const c = eData.months[m] || emptyMetrics();
       totalsByMonth[m].clientes_nuevos += c.clientes_nuevos;
@@ -601,7 +637,7 @@ function renderResumen(){
   tbl.innerHTML = thead + body;
 
   document.getElementById('notesGeneral').innerHTML =
-    '<b>Notas y validaciones</b><ul>' + DATA.notes.map(n => '<li>' + n + '</li>').join('') + '</ul>';
+    '<b>Notas y validaciones</b><ul>' + DATA.notes.map(n => '<li>' + escapeHtml(n) + '</li>').join('') + '</ul>';
 }
 
 function renderMesCurso(){
@@ -625,7 +661,7 @@ function renderMesCurso(){
 
   let html = '<thead><tr><th class="left">Ejecutivo</th><th>Clientes nuevos</th><th>Operaciones</th><th>Monto anticipo</th><th>Diferencia precio</th></tr></thead><tbody>';
   rows.forEach(r => {
-    html += `<tr><td class="left">${r.exec}</td><td>${fmtInt(r.clientes_nuevos)}</td><td>${fmtInt(r.operaciones)}</td><td>${fmtCLP(r.monto_fin)}</td><td>${fmtCLP(r.dif_precio)}</td></tr>`;
+    html += `<tr><td class="left">${escapeHtml(r.exec)}</td><td>${fmtInt(r.clientes_nuevos)}</td><td>${fmtInt(r.operaciones)}</td><td>${fmtCLP(r.monto_fin)}</td><td>${fmtCLP(r.dif_precio)}</td></tr>`;
   });
   html += `<tr class="total-row"><td class="left">Total general</td><td>${fmtInt(totals.clientes_nuevos)}</td><td>${fmtInt(totals.operaciones)}</td><td>${fmtCLP(totals.monto_fin)}</td><td>${fmtCLP(totals.dif_precio)}</td></tr></tbody>`;
   document.getElementById('tbl-mescurso').innerHTML = html;
@@ -644,8 +680,9 @@ function renderBarChart(containerId, items, colorClass, fmt){
   el.innerHTML = items.map(i => {
     const pct = Math.max((i.value / max * 100), 2);
     const outside = pct < 22;
+    const safeLabel = escapeHtml(i.label);
     return `<div class="bar-row">
-      <div class="bar-label" title="${i.label}">${i.label}</div>
+      <div class="bar-label" title="${safeLabel}">${safeLabel}</div>
       <div class="bar-track">
         <div class="bar-fill ${colorClass}" style="width:${pct}%">
           <span class="bar-val ${outside ? 'outside' : ''}">${fmt(i.value)}</span>
@@ -673,8 +710,8 @@ function renderFacturas(){
     totals.disponibles += r.disponibles;
     totals.cedidas += r.cedidas;
     body += `<tr>
-      <td class="left">${r.razon_social}</td>
-      <td class="left" style="font-weight:400;color:var(--ink-soft)">${r.ejecutivo||''}</td>
+      <td class="left">${escapeHtml(r.razon_social)}</td>
+      <td class="left" style="font-weight:400;color:var(--ink-soft)">${escapeHtml(r.ejecutivo||'')}</td>
       <td>${fmtWarren(r.promedio_warren)}${r.promedio_warren===null?'<span class="badge-empty">sin dato</span>':''}</td>
       <td>${fmtCLP(r.disponibles)}</td>
       <td>${fmtCLP(r.cedidas)}</td>
@@ -690,7 +727,7 @@ function renderFacturas(){
     + body + '</tbody>';
 
   document.getElementById('notesFacturas').innerHTML =
-    '<b>Notas y validaciones</b><ul>' + DATA.facturas_notes.map(n => '<li>' + n + '</li>').join('') + '</ul>';
+    '<b>Notas y validaciones</b><ul>' + DATA.facturas_notes.map(n => '<li>' + escapeHtml(n) + '</li>').join('') + '</ul>';
 }
 
 function renderAll(){
@@ -706,12 +743,18 @@ async function loadFromCSV(){
   if(btn) btn.disabled = true;
   setStatus('Leyendo CSV…', '');
 
+  // Aborta la petición si el servidor no responde en un tiempo razonable,
+  // en vez de dejar el dashboard cargando indefinidamente.
+  const NETWORK_TIMEOUT_MS = 15000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+
   try{
     // cache-bust para forzar lectura fresca al actualizar
     const bust = '?t=' + Date.now();
     const [r1, r2] = await Promise.all([
-      fetch(CSV_MASTER + bust),
-      fetch(CSV_FACTURAS + bust)
+      fetch(CSV_MASTER + bust, { signal: controller.signal }),
+      fetch(CSV_FACTURAS + bust, { signal: controller.signal })
     ]);
     if(!r1.ok) throw new Error('No se pudo leer ' + CSV_MASTER + ' (HTTP ' + r1.status + '). Debe estar en la misma carpeta que el HTML y servirse por HTTP.');
     if(!r2.ok) throw new Error('No se pudo leer ' + CSV_FACTURAS + ' (HTTP ' + r2.status + '). Debe estar en la misma carpeta que el HTML y servirse por HTTP.');
@@ -734,11 +777,21 @@ async function loadFromCSV(){
     const mm = String(now.getMinutes()).padStart(2,'0');
     setStatus('Actualizado ' + hh + ':' + mm + ' · ' + DATA.n_rows_master + ' ops · ' + DATA.n_rows_facturas + ' facturas', 'ok');
   } catch(err){
+    const isTimeout = err.name === 'AbortError';
+    const message = isTimeout
+      ? 'Tiempo de espera agotado al leer los CSV (' + (NETWORK_TIMEOUT_MS/1000) + 's). Intenta nuevamente.'
+      : (err.message || String(err));
     console.error(err);
-    setStatus(err.message || String(err), 'err');
-    document.getElementById('heroMeta').innerHTML =
-      '<span style="color:#f5c6c0;">⚠ ' + (err.message || String(err)) + '</span>';
+    setStatus(message, 'err');
+    // Si ya había datos cargados, se conservan en pantalla y solo se
+    // informa el error en el estado; solo se reemplaza heroMeta si esta
+    // es la carga inicial (no hay datos previos que preservar).
+    if(!DATA){
+      document.getElementById('heroMeta').innerHTML =
+        '<span style="color:#f5c6c0;">⚠ ' + escapeHtml(message) + '</span>';
+    }
   } finally {
+    clearTimeout(timeoutId);
     if(btn) btn.disabled = false;
   }
 }
