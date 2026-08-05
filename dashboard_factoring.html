@@ -381,7 +381,11 @@ select#execFilter:focus-visible{
   <!-- SECTION 2 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Mes en curso</h2></div>
-    <p class="sec-desc" id="mesCursoDesc">Mismas métricas y definiciones de la sección anterior, acotadas exclusivamente al mes en curso.</p>
+    <p class="sec-desc" id="mesCursoDesc">Detalle del mes calendario actual: ranking de ejecutivos por monto anticipado y diferencia de precio.</p>
+    <div class="ctx-bar" id="ctxMesCurso">
+      <span class="ctx-pill" id="ctxMesCursoPill">—</span>
+      <span class="ctx-text" id="ctxMesCursoText">Solo operaciones cuya fecha de creación cae en este mes. Los gráficos debajo usan los mismos números.</span>
+    </div>
     <div class="card">
       <div class="table-scroll">
         <table id="tbl-mescurso"></table>
@@ -390,12 +394,12 @@ select#execFilter:focus-visible{
     <div class="chart-grid">
       <div class="card chart-card">
         <h3>Monto de anticipo / financiamiento por ejecutivo</h3>
-        <p class="chart-sub">Ordenado de mayor a menor · mes en curso</p>
+        <p class="chart-sub">Mayor a menor · mismo mes que la tabla de arriba</p>
         <div id="chart-monto"></div>
       </div>
       <div class="card chart-card">
         <h3>Diferencia de precio por ejecutivo</h3>
-        <p class="chart-sub">Ordenado de mayor a menor · mes en curso</p>
+        <p class="chart-sub">Mayor a menor · mismo mes que la tabla de arriba</p>
         <div id="chart-dif"></div>
       </div>
     </div>
@@ -404,7 +408,11 @@ select#execFilter:focus-visible{
   <!-- SECTION 3 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Facturas nuevas</h2></div>
-    <p class="sec-desc">Consolidado por <code>Razón social empresa</code>, filtrable por ejecutivo (usa el filtro global de arriba). Disponibles = <code>Monto total</code> sin financiera asignada; cedidas = <code>Monto total</code> con financiera asignada.</p>
+    <p class="sec-desc">Estado del book de facturas nuevas, agrupado por empresa. Sirve para ver qué está disponible para ceder y qué ya tiene financiera.</p>
+    <div class="ctx-bar" id="ctxFacturas">
+      <span class="ctx-pill" id="ctxFacturasPill">—</span>
+      <span class="ctx-text" id="ctxFacturasText"><b>Disponibles</b> = sin financiera (o “-”). <b>Cedidas</b> = con banco/fondo asignado. <b>Warren</b> = promedio del score; “Sin registro” no entra al cálculo.</span>
+    </div>
     <div class="card">
       <div class="table-scroll">
         <table id="tbl-facturas"></table>
@@ -989,8 +997,8 @@ function setupKpiControls(){
   selMonth.value = kpiMonthYm;
   selBase.value = kpiBase;
 
-  selMonth.onchange = () => { kpiMonthYm = selMonth.value; renderKpis(); };
-  selBase.onchange = () => { kpiBase = selBase.value; renderKpis(); };
+  selMonth.onchange = () => { kpiMonthYm = selMonth.value; renderKpis(); updateContextBars(); };
+  selBase.onchange = () => { kpiBase = selBase.value; renderKpis(); updateContextBars(); };
 }
 
 function renderKpis(){
@@ -1070,12 +1078,69 @@ function renderKpis(){
       <span class="kpi-sub">${it.sub}</span>
     </div>
   `).join('');
+  // refresca textos de contexto (mes/base pueden haber cambiado)
+  if(typeof updateContextBars === 'function'){ /* se llama desde renderAll */ }
+}
+
+
+function filterLabel(){
+  return currentExec === 'ALL' ? 'Todos los ejecutivos' : currentExec;
+}
+
+function updateContextBars(){
+  if(!DATA) return;
+  const fl = filterLabel();
+  const year = DATA.selected_year;
+  const mesCurso = DATA.current_month_label;
+  const kpiMes = kpiMonthYm ? labelMonth(kpiMonthYm) : mesCurso;
+
+  const baseNames = {
+    prev_month: 'mes anterior',
+    same_last_year: 'mismo mes del año anterior',
+    year_avg: 'promedio del año',
+    prev_year_total: 'promedio mensual del año anterior'
+  };
+  const baseTxt = baseNames[kpiBase] || 'base seleccionada';
+
+  const set = (pillId, textId, pill, text) => {
+    const p = document.getElementById(pillId);
+    const t = document.getElementById(textId);
+    if(p) p.textContent = pill;
+    if(t) t.innerHTML = text;
+  };
+
+  set('ctxKpisPill', 'ctxKpisText',
+    kpiMes + ' · ' + fl,
+    'Estás viendo los KPIs de <b>' + kpiMes + '</b>, comparados contra <b>' + baseTxt + '</b>. '
+    + 'El filtro de ejecutivo aplica a estas tarjetas. Cambia mes o base con los selectores de arriba.'
+  );
+
+  set('ctxResumenPill', 'ctxResumenText',
+    'Año ' + year + ' · ' + fl,
+    'Tabla del <b>año ' + year + '</b>' + (currentExec === 'ALL' ? ' con todos los ejecutivos' : ' solo de <b>' + fl + '</b>')
+    + '. Cada mes agrupa operaciones por fecha de creación. La última columna es el acumulado de los 12 meses. '
+    + 'Cambia de año con las flechas ‹ › de la barra superior.'
+  );
+
+  set('ctxMesCursoPill', 'ctxMesCursoText',
+    mesCurso + ' · ' + fl,
+    'Solo el <b>mes calendario actual (' + mesCurso + ')</b>'
+    + (currentExec === 'ALL' ? '' : ', filtrado por <b>' + fl + '</b>')
+    + '. Ranking por monto anticipado. Los gráficos de barras usan exactamente estos mismos valores.'
+  );
+
+  set('ctxFacturasPill', 'ctxFacturasText',
+    fl,
+    (currentExec === 'ALL' ? 'Todas las empresas del archivo de facturas' : 'Empresas de <b>' + fl + '</b>')
+    + '. <b>Disponibles</b> = monto sin financiera asignada. <b>Cedidas</b> = ya tienen banco/fondo. '
+    + '<b>Promedio Warren</b> ignora celdas “Sin registro”.'
+  );
 }
 
 function renderAll(){
-
   if(!DATA) return;
   renderKpis();
+  updateContextBars();
   renderResumen();
   renderMesCurso();
   renderFacturas();
