@@ -292,6 +292,33 @@ select#execFilter:focus-visible{
     display:block; margin-top:6px; font-size:11px; color:#8a8471;
   }
 
+
+  .kpi-controls{
+    display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px;
+    margin-top:22px; margin-bottom:4px;
+    padding:12px 16px;
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:12px;
+    box-shadow:var(--shadow);
+  }
+  .kpi-controls label{
+    font-size:11.5px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--ink-soft);
+  }
+  .kpi-controls select{
+    font-family:'Inter',sans-serif; font-size:13.5px; font-weight:600;
+    padding:7px 32px 7px 11px; border-radius:8px; border:1.5px solid var(--line);
+    background:var(--paper) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><path d="M1 1l5 5 5-5" stroke="%23151b2b" stroke-width="1.6" fill="none"/></svg>') no-repeat right 10px center;
+    appearance:none; -webkit-appearance:none; color:var(--ink); cursor:pointer;
+  }
+  .kpi-controls select:focus{ outline:2px solid var(--gold); outline-offset:1px; }
+  .kpi-controls .kpi-period-tag{
+    margin-left:auto; font-size:12px; color:var(--teal-deep); font-weight:600;
+    background:#e7efe9; border:1px solid #cfe0d6; padding:5px 11px; border-radius:20px;
+  }
+  .kpi-grid{ margin-top:12px; }
+
 </style>
 </head>
 <body>
@@ -325,7 +352,19 @@ select#execFilter:focus-visible{
   </div>
 
   <!-- KPI STRIP -->
-  <div class="kpi-grid" id="kpiGrid" aria-label="Indicadores clave del mes en curso">
+  <div class="kpi-controls" id="kpiControls">
+    <label for="kpiMonth">Mes a analizar</label>
+    <select id="kpiMonth" aria-label="Mes a analizar"></select>
+    <label for="kpiBase">Comparar con</label>
+    <select id="kpiBase" aria-label="Base de comparación">
+      <option value="prev_month">Mes anterior</option>
+      <option value="same_last_year">Mismo mes año anterior</option>
+      <option value="year_avg">Promedio del año</option>
+      <option value="prev_year_total">Total año anterior (mensualizado)</option>
+    </select>
+    <span class="kpi-period-tag" id="kpiPeriodTag">—</span>
+  </div>
+  <div class="kpi-grid" id="kpiGrid" aria-label="Indicadores clave">
     <!-- filled by JS -->
   </div>
 
@@ -418,6 +457,8 @@ const fmtWarren = n => (n===null||n===undefined||Number.isNaN(n))
 let DATA = null;
 let currentExec = 'ALL';
 let selectedYear = new Date().getFullYear();
+let kpiMonthYm = null; // null = mes calendario actual
+let kpiBase = 'prev_month';
 let masterRowsCache = [];
 let facturaRowsCache = [];
 
@@ -865,55 +906,156 @@ function sumMetrics(list){
 }
 
 function metricsForMonth(ym){
+  if(!DATA || !ym) return emptyMetrics();
   const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
   const cells = execs.map(e => {
     const ed = DATA.summary.ejecutivos[e];
-    return (ed && ed.months[ym]) ? ed.months[ym] : emptyMetrics();
+    // months outside selected year may not exist in summary — compute from raw if needed
+    if(ed && ed.months[ym]) return ed.months[ym];
+    return emptyMetrics();
   });
   return sumMetrics(cells);
+}
+
+/** Métricas de un mes aunque no esté en DATA.months (otros años). Usa cache CSV. */
+function metricsForMonthRaw(ym){
+  if(!ym || !masterRowsCache.length) return metricsForMonth(ym);
+  // Si el mes pertenece al año cargado en DATA, usar summary (respetando filtro)
+  if(DATA && DATA.months && DATA.months.indexOf(ym) !== -1){
+    return metricsForMonth(ym);
+  }
+  // Calcular on-the-fly desde cache
+  const sample = masterRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const colExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
+  const colNuevo = keys.find(k => /cliente\s*nuevo/i.test(k)) || '(24)Cliente nuevo';
+  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
+  const colInteres = keys.find(k => /interes/i.test(k)) || keys.find(k => /\(41\)/.test(k)) || null;
+  const colMonto = keys.find(k => /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
+  const t = emptyMetrics();
+  masterRowsCache.forEach(r => {
+    const e = r[colExec] || '';
+    if(currentExec !== 'ALL' && e !== currentExec) return;
+    if(parseYM(r[colFecha]) !== ym) return;
+    t.clientes_nuevos += String(r[colNuevo]||'').trim().toUpperCase() === 'SI' ? 1 : 0;
+    t.operaciones += 1;
+    t.monto_fin += toNum(r[colMonto]);
+    t.dif_precio += colInteres ? toNum(r[colInteres]) : 0;
+  });
+  return t;
+}
+
+function yearAverageMetrics(year){
+  const months = [];
+  for(let mo=1; mo<=12; mo++) months.push(year + '-' + String(mo).padStart(2,'0'));
+  const sums = emptyMetrics();
+  let n = 0;
+  months.forEach(ym => {
+    const m = metricsForMonthRaw(ym);
+    if(m.operaciones > 0 || m.monto_fin > 0){
+      sums.clientes_nuevos += m.clientes_nuevos;
+      sums.operaciones += m.operaciones;
+      sums.monto_fin += m.monto_fin;
+      sums.dif_precio += m.dif_precio;
+      n++;
+    }
+  });
+  if(n === 0) return emptyMetrics();
+  return {
+    clientes_nuevos: sums.clientes_nuevos / n,
+    operaciones: sums.operaciones / n,
+    monto_fin: sums.monto_fin / n,
+    dif_precio: sums.dif_precio / n
+  };
+}
+
+function setupKpiControls(){
+  const selMonth = document.getElementById('kpiMonth');
+  const selBase = document.getElementById('kpiBase');
+  if(!selMonth || !DATA) return;
+
+  // Meses del año seleccionado + mes calendario si está en otro año
+  const opts = DATA.months.slice();
+  const cal = DATA.generated_current_month;
+  if(opts.indexOf(cal) === -1) opts.push(cal);
+  // Default: mes calendario
+  if(!kpiMonthYm || opts.indexOf(kpiMonthYm) === -1){
+    kpiMonthYm = opts.indexOf(cal) !== -1 ? cal : opts[opts.length - 1];
+  }
+  selMonth.innerHTML = opts.map(ym => {
+    const label = labelMonth(ym) + (ym === cal ? ' (actual)' : '');
+    return `<option value="${ym}">${label}</option>`;
+  }).join('');
+  selMonth.value = kpiMonthYm;
+  selBase.value = kpiBase;
+
+  selMonth.onchange = () => { kpiMonthYm = selMonth.value; renderKpis(); };
+  selBase.onchange = () => { kpiBase = selBase.value; renderKpis(); };
 }
 
 function renderKpis(){
   const el = document.getElementById('kpiGrid');
   if(!el || !DATA) return;
 
-  const curYm = DATA.generated_current_month; // mes calendario actual
-  const prevYm = shiftMonth(curYm, -1);
-  const cur = metricsForMonth(curYm);
-  const prev = metricsForMonth(prevYm);
+  setupKpiControls();
+
+  const curYm = kpiMonthYm || DATA.generated_current_month;
+  const cur = metricsForMonthRaw(curYm);
+  const [cy, cm] = curYm.split('-').map(Number);
+
+  let prev, baseLabel;
+  if(kpiBase === 'same_last_year'){
+    const prevYm = (cy - 1) + '-' + String(cm).padStart(2,'0');
+    prev = metricsForMonthRaw(prevYm);
+    baseLabel = 'vs ' + labelMonthShort(prevYm);
+  } else if(kpiBase === 'year_avg'){
+    prev = yearAverageMetrics(cy);
+    baseLabel = 'vs promedio ' + cy;
+  } else if(kpiBase === 'prev_year_total'){
+    // promedio mensual del año anterior (total/12) para comparar un mes
+    const avg = yearAverageMetrics(cy - 1);
+    prev = avg;
+    baseLabel = 'vs prom. mensual ' + (cy - 1);
+  } else {
+    // prev_month
+    const prevYm = shiftMonth(curYm, -1);
+    prev = metricsForMonthRaw(prevYm);
+    baseLabel = 'vs ' + labelMonthShort(prevYm);
+  }
 
   const ticketCur = cur.operaciones ? cur.monto_fin / cur.operaciones : 0;
   const ticketPrev = prev.operaciones ? prev.monto_fin / prev.operaciones : 0;
-  const spreadCur = cur.monto_fin ? (cur.dif_precio / cur.monto_fin) * 100 : 0;
-  const spreadPrev = prev.monto_fin ? (prev.dif_precio / prev.monto_fin) * 100 : 0;
+
+  const tag = document.getElementById('kpiPeriodTag');
+  if(tag) tag.textContent = labelMonth(curYm) + ' · ' + baseLabel;
 
   const items = [
     {
-      key: 'ops', tone: '', label: 'Operaciones',
+      tone: '', label: 'Operaciones',
       value: fmtInt(cur.operaciones),
       delta: pctDelta(cur.operaciones, prev.operaciones),
-      sub: 'vs ' + labelMonthShort(prevYm)
+      sub: baseLabel
     },
     {
-      key: 'monto', tone: 'acqua', label: 'Monto anticipo',
+      tone: 'acqua', label: 'Monto anticipo',
       value: fmtCLP(cur.monto_fin),
       delta: pctDelta(cur.monto_fin, prev.monto_fin),
-      sub: 'vs ' + labelMonthShort(prevYm)
+      sub: baseLabel
     },
     {
-      key: 'dif', tone: 'gold', label: 'Diferencia de precio',
+      tone: 'gold', label: 'Diferencia de precio',
       value: fmtCLP(cur.dif_precio),
       delta: pctDelta(cur.dif_precio, prev.dif_precio),
-      sub: 'vs ' + labelMonthShort(prevYm)
+      sub: baseLabel
     },
     {
-      key: 'nuevos', tone: '', label: 'Clientes nuevos',
-      value: fmtInt(cur.clientes_nuevos),
+      tone: '', label: 'Clientes nuevos',
+      value: fmtInt(Math.round(cur.clientes_nuevos)),
       delta: pctDelta(cur.clientes_nuevos, prev.clientes_nuevos),
-      sub: 'vs ' + labelMonthShort(prevYm)
+      sub: baseLabel
     },
     {
-      key: 'ticket', tone: 'rose', label: 'Ticket promedio',
+      tone: 'rose', label: 'Ticket promedio',
       value: fmtCLP(ticketCur),
       delta: pctDelta(ticketCur, ticketPrev),
       sub: 'monto ÷ operaciones'
@@ -931,6 +1073,7 @@ function renderKpis(){
 }
 
 function renderAll(){
+
   if(!DATA) return;
   renderKpis();
   renderResumen();
