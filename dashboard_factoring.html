@@ -222,6 +222,26 @@ select#execFilter:focus-visible{
   body{ background:#fff; }
 }
 
+
+  .year-nav{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--paper); border:1.5px solid var(--line); border-radius:8px;
+    padding:4px 6px;
+  }
+  .year-nav button{
+    border:none; background:transparent; cursor:pointer;
+    width:32px; height:28px; border-radius:6px;
+    font-size:16px; color:var(--ink); font-weight:600;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .year-nav button:hover{ background:var(--paper-2); color:var(--teal-deep); }
+  .year-nav button:disabled{ opacity:.35; cursor:default; }
+  .year-nav .year-label{
+    font-family:'IBM Plex Mono',monospace; font-size:14px; font-weight:600;
+    min-width:52px; text-align:center; color:var(--ink);
+  }
+  .filterbar .filter-tag{ margin-left:0; }
+
 </style>
 </head>
 <body>
@@ -243,6 +263,12 @@ select#execFilter:focus-visible{
   <div class="filterbar">
     <label for="execFilter">Ejecutivo</label>
     <select id="execFilter" aria-label="Filtrar por ejecutivo"></select>
+    <label style="margin-left:4px;">Año</label>
+    <div class="year-nav" role="group" aria-label="Seleccionar año">
+      <button type="button" id="btnPrevYear" title="Año anterior" aria-label="Año anterior">‹</button>
+      <span class="year-label" id="yearLabel">2026</span>
+      <button type="button" id="btnNextYear" title="Año siguiente" aria-label="Año siguiente">›</button>
+    </div>
     <span class="filter-tag" id="filterTag" aria-live="polite">Mostrando todos los ejecutivos</span>
     <button type="button" id="btnRefresh" class="btn-refresh" title="Volver a leer los CSV" aria-label="Actualizar datos desde los archivos CSV">↻ Actualizar desde CSV</button>
     <span class="load-status" id="loadStatus" role="status" aria-live="polite"></span>
@@ -251,7 +277,7 @@ select#execFilter:focus-visible{
   <!-- SECTION 1 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Resumen General</h2></div>
-    <p class="sec-desc">Últimos tres meses calendario disponibles, incluyendo el mes en curso, agrupados por ejecutivo. Clientes nuevos según <code>(24)Cliente nuevo</code>; operaciones, monto de anticipo y diferencia de precio según <code>(47)Fecha creacion</code>.</p>
+    <p class="sec-desc">Los 12 meses del año seleccionado, agrupados por ejecutivo. Usa las flechas de Año para retroceder o avanzar. Clientes nuevos según <code>(24)Cliente nuevo</code>; operaciones, monto de anticipo y diferencia de precio según <code>(47)Fecha creacion</code>.</p>
     <div class="card">
       <table id="tbl-resumen"></table>
     </div>
@@ -336,6 +362,9 @@ const fmtWarren = n => (n===null||n===undefined||Number.isNaN(n))
 
 let DATA = null;
 let currentExec = 'ALL';
+let selectedYear = new Date().getFullYear();
+let masterRowsCache = [];
+let facturaRowsCache = [];
 
 /* ===================== 1. LEER CSV ===================== */
 function splitCSVLine(line){
@@ -384,9 +413,10 @@ function toNum(v){
 function parseYM(d){
   d = (d||'').trim();
   let m;
-  if((m = d.match(/^(\d{2})-(\d{2})-(\d{4})/))) return m[3] + '-' + m[2];
-  if((m = d.match(/^(\d{4})-(\d{2})-(\d{2})/))) return m[1] + '-' + m[2];
-  if((m = d.match(/^(\d{2})\/(\d{2})\/(\d{4})/))) return m[3] + '-' + m[2];
+  // Acepta día con 1 o 2 dígitos: 4-08-2026 y 04-08-2026
+  if((m = d.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/))) return m[3] + '-' + String(m[2]).padStart(2,'0');
+  if((m = d.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return m[1] + '-' + String(m[2]).padStart(2,'0');
+  if((m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return m[3] + '-' + String(m[2]).padStart(2,'0');
   return null;
 }
 
@@ -402,13 +432,19 @@ function labelMonth(ym){
   const [y,mo] = ym.split('-');
   return (MONTH_NAMES[mo] || mo) + ' ' + y;
 }
+function labelMonthShort(ym){
+  const [y,mo] = ym.split('-');
+  const short = { '01':'Ene','02':'Feb','03':'Mar','04':'Abr','05':'May','06':'Jun',
+    '07':'Jul','08':'Ago','09':'Sep','10':'Oct','11':'Nov','12':'Dic' };
+  return (short[mo] || mo) + ' ' + y;
+}
 
 function emptyMetrics(){
   return {clientes_nuevos:0, operaciones:0, monto_fin:0, dif_precio:0};
 }
 
 /* ===================== 2. CALCULAR DATOS ===================== */
-function buildData(masterRows, facturaRows){
+function buildData(masterRows, facturaRows, selectedYear){
   const notes = [];
   const execSet = new Set();
   const monthSet = new Set();
@@ -431,10 +467,14 @@ function buildData(masterRows, facturaRows){
 
   const ejecutivos = Array.from(execSet).sort((a,b)=>a.localeCompare(b,'es'));
 
-  // Mes en curso = mes calendario de HOY (se actualiza solo al cambiar de mes)
+  // Mes en curso = calendario de HOY. Resumen = los 12 meses del año seleccionado.
   const now = new Date();
   const current_month = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const months = [shiftMonth(current_month,-2), shiftMonth(current_month,-1), current_month];
+  const year = (typeof selectedYear === 'number' && selectedYear > 2000) ? selectedYear : now.getFullYear();
+  const months = [];
+  for(let mo = 1; mo <= 12; mo++){
+    months.push(year + '-' + String(mo).padStart(2,'0'));
+  }
   const month_labels = {};
   months.forEach(m => { month_labels[m] = labelMonth(m); });
 
@@ -478,10 +518,12 @@ function buildData(masterRows, facturaRows){
     summary.total.accum.dif_precio += dif;
   });
 
-  months.forEach(m => {
-    const has = masterRows.some(r => parseYM(r[colFecha]) === m);
-    if(!has) notes.push('Sin registros en el archivo maestro para: ' + month_labels[m] + '. Se muestran como 0.');
-  });
+  const missing = months.filter(m => !masterRows.some(r => parseYM(r[colFecha]) === m));
+  if(missing.length && missing.length < 12){
+    notes.push('Sin registros en: ' + missing.map(m => labelMonthShort(m)).join(', ') + '. Se muestran como 0.');
+  } else if(missing.length === 12){
+    notes.push('No hay operaciones en el archivo maestro para el año ' + year + '.');
+  }
   if(colInteres){
     notes.push('Se utilizó la columna "' + colInteres + '" como componente de interés en la Diferencia de precio.');
   } else {
@@ -541,7 +583,8 @@ function buildData(masterRows, facturaRows){
 
   return {
     generated_current_month: current_month,
-    current_month_label: month_labels[current_month],
+    current_month_label: labelMonth(current_month),
+    selected_year: year,
     months,
     month_labels,
     ejecutivos,
@@ -564,7 +607,7 @@ function setStatus(msg, type){
 
 function renderHeroMeta(){
   document.getElementById('heroMeta').innerHTML = `
-    <span>Período analizado: <b>${DATA.month_labels[DATA.months[0]]} – ${DATA.month_labels[DATA.months[2]]}</b></span>
+    <span>Año: <b>${DATA.selected_year}</b></span>
     <span class="dot">·</span>
     <span>Mes en curso: <b>${DATA.current_month_label}</b></span>
     <span class="dot">·</span>
@@ -606,8 +649,8 @@ function renderResumen(){
   const tbl = document.getElementById('tbl-resumen');
 
   let thead = '<thead><tr class="group-row"><th class="left" rowspan="2">Ejecutivo</th>';
-  months.forEach(m => { thead += `<th colspan="4">${DATA.month_labels[m]}</th>`; });
-  thead += '<th colspan="4">Acumulado 3 meses</th></tr><tr>';
+  months.forEach(m => { thead += `<th colspan="4">${labelMonthShort(m)}</th>`; });
+  thead += '<th colspan="4">Acumulado año</th></tr><tr>';
   months.forEach(() => { thead += '<th>Clientes nuevos</th><th>Operaciones</th><th>Monto anticipo</th><th>Diferencia precio</th>'; });
   thead += '<th>Clientes nuevos</th><th>Operaciones</th><th>Monto anticipo</th><th>Diferencia precio</th></tr></thead>';
 
@@ -778,7 +821,10 @@ async function loadFromCSV(){
       throw new Error('Los CSV se leyeron pero no tienen filas de datos.');
     }
 
-    DATA = buildData(masterRows, facturaRows);
+    masterRowsCache = masterRows;
+    facturaRowsCache = facturaRows;
+    DATA = buildData(masterRows, facturaRows, selectedYear);
+    document.getElementById('yearLabel').textContent = String(selectedYear);
     renderHeroMeta();
     setupFilter();
     renderAll(); // ← actualiza las 3 tablas + gráficos
@@ -806,6 +852,26 @@ async function loadFromCSV(){
     if(btn) btn.disabled = false;
   }
 }
+
+
+function rebuildFromCache(){
+  if(!masterRowsCache.length && !facturaRowsCache.length) return;
+  DATA = buildData(masterRowsCache, facturaRowsCache, selectedYear);
+  const yl = document.getElementById('yearLabel');
+  if(yl) yl.textContent = String(selectedYear);
+  renderHeroMeta();
+  setupFilter();
+  renderAll();
+}
+
+document.getElementById('btnPrevYear').addEventListener('click', () => {
+  selectedYear -= 1;
+  rebuildFromCache();
+});
+document.getElementById('btnNextYear').addEventListener('click', () => {
+  selectedYear += 1;
+  rebuildFromCache();
+});
 
 document.getElementById('btnRefresh').addEventListener('click', loadFromCSV);
 loadFromCSV(); // carga inicial: lee CSV y llena tablas
