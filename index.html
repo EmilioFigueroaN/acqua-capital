@@ -496,7 +496,7 @@ select#execFilter:focus-visible{
       <table id="tbl-resumen"></table>
     </div>
     <div class="chart-download-row">
-      <button type="button" id="btnDownloadResumen" class="btn-refresh" title="Descargar en CSV la tabla de Resumen General">⬇ Descargar Resumen General (CSV)</button>
+      <button type="button" id="btnDownloadResumen" class="btn-refresh" title="Descargar CSV detallado operación a operación (todas las columnas del maestro)">⬇ Descargar detalle operaciones (CSV)</button>
     </div>
     <div class="notes" id="notesGeneral"></div>
   </section>
@@ -1029,52 +1029,34 @@ function downloadCSV(filename, rows){
 }
 
 function downloadResumenCSV(){
-  if(!DATA) return;
-  const months = DATA.months;
-  const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
+  // Exporta el detalle operación a operación (todas las columnas del maestro),
+  // filtrado por año seleccionado y ejecutivo activo — mismo nivel de detalle que el CSV fuente.
+  if(!masterRowsCache || !masterRowsCache.length){
+    alert('No hay datos del maestro cargados. Pulsa "Actualizar desde CSV" e intenta de nuevo.');
+    return;
+  }
+  const sample = masterRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
+  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
 
-  const header = ['Ejecutivo'];
-  months.forEach(m => {
-    const label = labelMonthShort(m);
-    header.push(label + ' - Clientes nuevos', label + ' - Operaciones', label + ' - Monto anticipo (CLP)', label + ' - Diferencia precio (CLP)');
-  });
-  header.push('Acumulado - Clientes nuevos', 'Acumulado - Operaciones', 'Acumulado - Monto anticipo (CLP)', 'Acumulado - Diferencia precio (CLP)');
-  const out = [header];
-
-  const totals = emptyMetrics();
-  const totalsByMonth = {};
-  months.forEach(m => { totalsByMonth[m] = emptyMetrics(); });
-
-  execs.forEach(e => {
-    const eData = DATA.summary.ejecutivos[e];
-    if(!eData) return;
-    const row = [e];
-    months.forEach(m => {
-      const c = eData.months[m] || emptyMetrics();
-      totalsByMonth[m].clientes_nuevos += c.clientes_nuevos;
-      totalsByMonth[m].operaciones += c.operaciones;
-      totalsByMonth[m].monto_fin += c.monto_fin;
-      totalsByMonth[m].dif_precio += c.dif_precio;
-      row.push(Math.round(c.clientes_nuevos), c.operaciones, Math.round(c.monto_fin), Math.round(c.dif_precio));
-    });
-    totals.clientes_nuevos += eData.accum.clientes_nuevos;
-    totals.operaciones += eData.accum.operaciones;
-    totals.monto_fin += eData.accum.monto_fin;
-    totals.dif_precio += eData.accum.dif_precio;
-    row.push(Math.round(eData.accum.clientes_nuevos), eData.accum.operaciones, Math.round(eData.accum.monto_fin), Math.round(eData.accum.dif_precio));
-    out.push(row);
+  const yearStr = String(selectedYear);
+  const rows = masterRowsCache.filter(r => {
+    if(currentExec !== 'ALL' && (r[colExec] || '') !== currentExec) return false;
+    const ym = parseYM(r[colFecha]);
+    if(!ym) return false;
+    return ym.slice(0, 4) === yearStr;
   });
 
-  const totalRow = ['Total general'];
-  months.forEach(m => {
-    const t = totalsByMonth[m];
-    totalRow.push(Math.round(t.clientes_nuevos), t.operaciones, Math.round(t.monto_fin), Math.round(t.dif_precio));
+  // Todas las columnas originales, en el mismo orden del archivo fuente
+  const headers = keys.slice();
+  const out = [headers];
+  rows.forEach(r => {
+    out.push(headers.map(h => r[h] != null ? r[h] : ''));
   });
-  totalRow.push(Math.round(totals.clientes_nuevos), totals.operaciones, Math.round(totals.monto_fin), Math.round(totals.dif_precio));
-  out.push(totalRow);
 
   const filterSuffix = currentExec === 'ALL' ? 'todos' : currentExec.replace(/\s+/g, '_');
-  const fileName = 'resumen_general_' + selectedYear + '_' + filterSuffix + '.csv';
+  const fileName = 'factoring_master_detalle_' + selectedYear + '_' + filterSuffix + '.csv';
   downloadCSV(fileName, out);
 }
 
