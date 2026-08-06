@@ -645,11 +645,30 @@ function toNum(v){
 
 function parseYM(d){
   d = (d||'').trim();
+  if(!d) return null;
   let m;
-  // Acepta día con 1 o 2 dígitos: 4-08-2026 y 04-08-2026
-  if((m = d.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/))) return m[3] + '-' + String(m[2]).padStart(2,'0');
+  // YYYY-MM-DD
   if((m = d.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return m[1] + '-' + String(m[2]).padStart(2,'0');
-  if((m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return m[3] + '-' + String(m[2]).padStart(2,'0');
+  // YYYY-MM (cliente nuevo / colocado mes)
+  if((m = d.match(/^(\d{4})-(\d{2})$/))) return m[1] + '-' + m[2];
+  // D-M-YYYY o M-D-YYYY con guiones
+  if((m = d.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/))){
+    const a = parseInt(m[1],10), b = parseInt(m[2],10);
+    // si el segundo > 12 → D-M-YYYY no aplica; tratar como M-D
+    if(b > 12) return m[3] + '-' + String(a).padStart(2,'0');
+    if(a > 12) return m[3] + '-' + String(b).padStart(2,'0');
+    // preferir D-M (formato CL) con guiones
+    return m[3] + '-' + String(b).padStart(2,'0');
+  }
+  // M/D/YYYY o D/M/YYYY con barras (export Excel)
+  if((m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))){
+    const a = parseInt(m[1],10), b = parseInt(m[2],10);
+    // 7/30/2026 → mes 7 (US M/D). 30/7/2026 → mes 7 (CL D/M)
+    if(b > 12) return m[3] + '-' + String(a).padStart(2,'0'); // M/D
+    if(a > 12) return m[3] + '-' + String(b).padStart(2,'0'); // D/M
+    // Ambiguo: el export real de Acqua usa M/D/YYYY (Excel)
+    return m[3] + '-' + String(a).padStart(2,'0');
+  }
   return null;
 }
 
@@ -682,14 +701,17 @@ function buildData(masterRows, facturaRows, selectedYear){
   const execSet = new Set();
   const monthSet = new Set();
 
-  // Detectar columnas flexibles
+  // Detectar columnas flexibles (soporta headers "(29)Ejecutivo" del export real)
   const sample = masterRows[0] || {};
   const keys = Object.keys(sample);
-  const colExec   = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
+  const colExec   = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
   const colNuevo  = keys.find(k => /cliente\s*nuevo/i.test(k)) || '(24)Cliente nuevo';
   const colFecha  = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
-  const colInteres= keys.find(k => /interes/i.test(k)) || keys.find(k => /\(41\)/.test(k)) || null;
-  const colMonto  = keys.find(k => /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
+  const colInteres= keys.find(k => /\(41\)/.test(k)) || keys.find(k => /interes/i.test(k) && !/tasa/i.test(k)) || null;
+  const colMonto  = keys.find(k => /\(45\).*anticipo/i.test(k) || /^monto anticipo$/i.test(k)) || keys.find(k => /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
+  const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
+  const colGiro   = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
+  const colColocado = keys.find(k => /colocado\s*mes/i.test(k)) || null;
 
   masterRows.forEach(r => {
     const e = r[colExec] || '';
@@ -724,8 +746,14 @@ function buildData(masterRows, facturaRows, selectedYear){
     const ym = parseYM(r[colFecha]);
     if(!ym || !summary.ejecutivos[e].months[ym]) return;
 
-    const esNuevo = String(r[colNuevo]||'').trim().toUpperCase() === 'SI' ? 1 : 0;
-    const monto = toNum(r[colMonto]);
+    // Cliente nuevo: en export real es YYYY-MM (mes en que el cliente es nuevo).
+    // También acepta SI/NO del formato simplificado.
+    const nuevoRaw = String(r[colNuevo]||'').trim();
+    const esNuevo = (/^SI$/i.test(nuevoRaw) || parseYM(nuevoRaw) === ym) ? 1 : 0;
+    // Monto: (45)Monto anticipo suele venir 0; usar final adelantado o giro real
+    let monto = toNum(r[colMonto]);
+    if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
+    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
     const dif = colInteres ? toNum(r[colInteres]) : 0;
 
     const cell = summary.ejecutivos[e].months[ym];
@@ -758,7 +786,9 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('No hay operaciones en el archivo maestro para el año ' + year + '.');
   }
   if(colInteres){
-    notes.push('Se utilizó la columna "' + colInteres + '" como componente de interés en la Diferencia de precio.');
+    notes.push('Se utilizó la columna "' + colInteres + '" como Diferencia de precio (interés).');
+    notes.push('Monto anticipo: se usa (45); si viene 0, se toma (43) Monto final adelantado o (46) Monto a giro real.');
+    notes.push('Cliente nuevo: se cuenta cuando el campo trae SI o un mes YYYY-MM igual al mes de la operación.');
   } else {
     notes.push('No se encontró columna de interés en el maestro; Diferencia de precio = 0.');
   }
@@ -1189,19 +1219,25 @@ function metricsForMonthRaw(ym){
   // Calcular on-the-fly desde cache
   const sample = masterRowsCache[0] || {};
   const keys = Object.keys(sample);
-  const colExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
+  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
   const colNuevo = keys.find(k => /cliente\s*nuevo/i.test(k)) || '(24)Cliente nuevo';
   const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
-  const colInteres = keys.find(k => /interes/i.test(k)) || keys.find(k => /\(41\)/.test(k)) || null;
-  const colMonto = keys.find(k => /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
+  const colInteres = keys.find(k => /\(41\)/.test(k)) || keys.find(k => /interes/i.test(k) && !/tasa/i.test(k)) || null;
+  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
+  const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
+  const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
   const t = emptyMetrics();
   masterRowsCache.forEach(r => {
     const e = r[colExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
     if(parseYM(r[colFecha]) !== ym) return;
-    t.clientes_nuevos += String(r[colNuevo]||'').trim().toUpperCase() === 'SI' ? 1 : 0;
+    const nuevoRaw = String(r[colNuevo]||'').trim();
+    t.clientes_nuevos += (/^SI$/i.test(nuevoRaw) || parseYM(nuevoRaw) === ym) ? 1 : 0;
     t.operaciones += 1;
-    t.monto_fin += toNum(r[colMonto]);
+    let monto = toNum(r[colMonto]);
+    if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
+    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
+    t.monto_fin += monto;
     t.dif_precio += colInteres ? toNum(r[colInteres]) : 0;
   });
   return t;
@@ -1527,7 +1563,7 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Oportunidades:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
+      html: `<b>Inventario:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
         + (pDisp >= 60 ? 'Hay mucho stock sin ceder.' : 'La mayor parte del book ya tiene financiera.')
     });
   }
