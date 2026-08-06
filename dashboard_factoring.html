@@ -597,6 +597,55 @@ select#execFilter:focus-visible{
   .btn-logout:hover{ background:rgba(255,255,255,0.08); color:#fff; }
   .filterbar.locked-exec #execFilter{ pointer-events:none; opacity:0.75; }
 
+
+  /* ---------- MORA / AGING ---------- */
+  .mora-grid{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap:12px;
+    margin-bottom:16px;
+  }
+  @media (max-width:900px){ .mora-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:480px){ .mora-grid{ grid-template-columns:1fr; } }
+  .mora-tile{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px 14px 12px;
+    position:relative;
+    overflow:hidden;
+  }
+  .mora-tile::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  }
+  .mora-tile.vigente::before{ background:var(--teal); }
+  .mora-tile.m1::before{ background:var(--gold); }
+  .mora-tile.m2::before{ background:#c45c2a; }
+  .mora-tile.m3::before{ background:var(--rose); }
+  .mora-tile .mt-label{
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--ink-soft); margin-bottom:6px;
+  }
+  .mora-tile .mt-monto{
+    font-family:'Fraunces',serif; font-size:20px; font-weight:600;
+    color:var(--ink); letter-spacing:-0.02em;
+  }
+  .mora-tile .mt-meta{
+    font-size:12px; color:#8a8471; margin-top:4px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .mora-bar-wrap{ margin-top:8px; }
+  .mora-track{
+    height:8px; border-radius:5px; background:var(--paper-2); overflow:hidden;
+  }
+  .mora-fill{ height:100%; border-radius:5px; }
+  .mora-fill.vigente{ background:var(--teal); }
+  .mora-fill.m1{ background:var(--gold); }
+  .mora-fill.m2{ background:#c45c2a; }
+  .mora-fill.m3{ background:var(--rose); }
+  .mora-table-wrap{ margin-top:8px; overflow:auto; max-height:280px; }
+  .mora-table-wrap table{ min-width:520px; font-size:12.5px; }
+
 </style>
 </head>
 <body>
@@ -611,7 +660,7 @@ select#execFilter:focus-visible{
     <div class="login-error" id="loginError" role="alert"></div>
     <div class="login-field">
       <label for="loginNombre">Nombre</label>
-      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Emilio Figueroa">
+      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Viviana San Martín">
     </div>
     <div class="login-field">
       <label for="loginRut">RUT</label>
@@ -701,6 +750,33 @@ select#execFilter:focus-visible{
       <ul class="insight-list" id="insightList"></ul>
     </div>
   </div>
+
+  <!-- MORA / AGING -->
+  <section class="block" id="secMora">
+    <div class="sec-head"><span class="sec-num">●</span><h2 class="sec-title">Aging de mora</h2></div>
+    <p class="sec-desc">Clasificación del book de operaciones según días de mora del maestro. Días negativos = aún no vence (vigente). Positivos = días en mora.</p>
+    <div class="ctx-bar" id="ctxMora">
+      <span class="ctx-pill" id="ctxMoraPill">—</span>
+      <span class="ctx-text" id="ctxMoraText">Fuente: columna (19) Días de mora y montos del maestro. Respeta el filtro de ejecutivo / sesión.</span>
+    </div>
+    <div class="card">
+      <div class="mora-grid" id="moraTiles"></div>
+      <div class="mora-table-wrap">
+        <table id="tbl-mora">
+          <thead>
+            <tr>
+              <th class="left">Tramo</th>
+              <th>Operaciones</th>
+              <th>Monto (CLP)</th>
+              <th>% del book</th>
+              <th class="left">Comportamiento</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
   <!-- SECTION 1 -->
   <section class="block">
@@ -1905,7 +1981,7 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Oportunidades:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
+      html: `<b>Inventario:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
         + (pDisp >= 60 ? 'Hay mucho stock sin ceder.' : 'La mayor parte del book ya tiene financiera.')
     });
   }
@@ -1945,11 +2021,116 @@ function renderIntel(){
   renderInsights(conc || { items:[], book:0 });
 }
 
+
+function renderMora(){
+  const tiles = document.getElementById('moraTiles');
+  const tbody = document.querySelector('#tbl-mora tbody');
+  const pill = document.getElementById('ctxMoraPill');
+  if(!tiles || !tbody) return;
+
+  if(!masterRowsCache || !masterRowsCache.length){
+    tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">Sin datos del maestro para aging.</p>';
+    tbody.innerHTML = '';
+    return;
+  }
+
+  const sample = masterRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k));
+  const colDias = keys.find(k => /d[ií]as\s*de\s*mora/i.test(k) || /\(19\)/.test(k));
+  const colComp = keys.find(k => /comportamiento/i.test(k) || /\(18\)/.test(k));
+  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
+  const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k));
+  const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k));
+
+  if(!colDias){
+    tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">No se encontró la columna de días de mora en el maestro.</p>';
+    tbody.innerHTML = '';
+    return;
+  }
+
+  const buckets = {
+    vigente: { key:'vigente', label:'Vigente / por vencer', cls:'vigente', ops:0, monto:0, comps:{} },
+    m1:      { key:'m1', label:'Mora 1 – 30 días', cls:'m1', ops:0, monto:0, comps:{} },
+    m2:      { key:'m2', label:'Mora 31 – 60 días', cls:'m2', ops:0, monto:0, comps:{} },
+    m3:      { key:'m3', label:'Mora 60+ días', cls:'m3', ops:0, monto:0, comps:{} }
+  };
+
+  masterRowsCache.forEach(r => {
+    const e = r[colExec] || '';
+    if(currentExec !== 'ALL' && e !== currentExec) return;
+
+    let dias = parseInt(String(r[colDias] || '').replace(/[^\d\-]/g,''), 10);
+    if(isNaN(dias)) return;
+
+    let monto = toNum(r[colMonto]);
+    if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
+    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
+
+    let b;
+    if(dias <= 0) b = buckets.vigente;
+    else if(dias <= 30) b = buckets.m1;
+    else if(dias <= 60) b = buckets.m2;
+    else b = buckets.m3;
+
+    b.ops += 1;
+    b.monto += monto;
+    const c = (colComp ? (r[colComp] || '—') : '—').trim() || '—';
+    b.comps[c] = (b.comps[c] || 0) + 1;
+  });
+
+  const totalMonto = Object.values(buckets).reduce((s,b) => s + b.monto, 0);
+  const totalOps = Object.values(buckets).reduce((s,b) => s + b.ops, 0);
+  const order = ['vigente','m1','m2','m3'];
+
+  if(pill){
+    const fl = (typeof filterLabel === 'function') ? filterLabel() : (currentExec === 'ALL' ? 'Todos' : currentExec);
+    pill.textContent = fl + ' · ' + totalOps + ' ops · ' + fmtCLP(totalMonto);
+  }
+
+  tiles.innerHTML = order.map(k => {
+    const b = buckets[k];
+    const pct = totalMonto > 0 ? (b.monto / totalMonto * 100) : 0;
+    return `<div class="mora-tile ${b.cls}">
+      <div class="mt-label">${b.label}</div>
+      <div class="mt-monto">${fmtCLP(b.monto)}</div>
+      <div class="mt-meta">${b.ops} ops · ${pct.toFixed(1).replace('.',',')}%</div>
+      <div class="mora-bar-wrap"><div class="mora-track"><div class="mora-fill ${b.cls}" style="width:${Math.min(pct,100)}%"></div></div></div>
+    </div>`;
+  }).join('');
+
+  tbody.innerHTML = order.map(k => {
+    const b = buckets[k];
+    const pct = totalMonto > 0 ? (b.monto / totalMonto * 100) : 0;
+    const compStr = Object.keys(b.comps).length
+      ? Object.entries(b.comps).sort((a,c)=>c[1]-a[1]).map(([n,c]) => n + ' (' + c + ')').join(', ')
+      : '—';
+    return `<tr>
+      <td class="left">${b.label}</td>
+      <td>${fmtInt(b.ops)}</td>
+      <td>${fmtCLP(b.monto)}</td>
+      <td>${pct.toFixed(1).replace('.',',')}%</td>
+      <td class="left" style="font-weight:400;color:var(--ink-soft)">${escapeHtml(compStr)}</td>
+    </tr>`;
+  }).join('') + `<tr class="total-row">
+      <td class="left">Total</td>
+      <td>${fmtInt(totalOps)}</td>
+      <td>${fmtCLP(totalMonto)}</td>
+      <td>100%</td>
+      <td></td>
+    </tr>`;
+
+  // Insight de mora si hay exposición en mora
+  const moraMonto = buckets.m1.monto + buckets.m2.monto + buckets.m3.monto;
+  return { totalMonto, moraMonto, buckets };
+}
+
 function renderAll(){
   if(!DATA) return;
   renderKpis();
   updateContextBars();
   renderIntel();
+  renderMora();
   renderResumen();
   renderMesCurso();
   renderFacturas();
