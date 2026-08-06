@@ -495,6 +495,9 @@ select#execFilter:focus-visible{
     <div class="card">
       <table id="tbl-resumen"></table>
     </div>
+    <div class="chart-download-row">
+      <button type="button" id="btnDownloadResumen" class="btn-refresh" title="Descargar en CSV la tabla de Resumen General">⬇ Descargar Resumen General (CSV)</button>
+    </div>
     <div class="notes" id="notesGeneral"></div>
   </section>
 
@@ -540,6 +543,9 @@ select#execFilter:focus-visible{
       <div class="table-scroll">
         <table id="tbl-facturas"></table>
       </div>
+    </div>
+    <div class="chart-download-row">
+      <button type="button" id="btnDownloadFacturas" class="btn-refresh" title="Descargar en CSV la tabla de Facturas nuevas">⬇ Descargar Facturas nuevas (CSV)</button>
     </div>
     <div class="notes" id="notesFacturas"></div>
   </section>
@@ -990,6 +996,91 @@ function downloadCSV(filename, rows){
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadResumenCSV(){
+  if(!DATA) return;
+  const months = DATA.months;
+  const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
+
+  const header = ['Ejecutivo'];
+  months.forEach(m => {
+    const label = labelMonthShort(m);
+    header.push(label + ' - Clientes nuevos', label + ' - Operaciones', label + ' - Monto anticipo (CLP)', label + ' - Diferencia precio (CLP)');
+  });
+  header.push('Acumulado - Clientes nuevos', 'Acumulado - Operaciones', 'Acumulado - Monto anticipo (CLP)', 'Acumulado - Diferencia precio (CLP)');
+  const out = [header];
+
+  const totals = emptyMetrics();
+  const totalsByMonth = {};
+  months.forEach(m => { totalsByMonth[m] = emptyMetrics(); });
+
+  execs.forEach(e => {
+    const eData = DATA.summary.ejecutivos[e];
+    if(!eData) return;
+    const row = [e];
+    months.forEach(m => {
+      const c = eData.months[m] || emptyMetrics();
+      totalsByMonth[m].clientes_nuevos += c.clientes_nuevos;
+      totalsByMonth[m].operaciones += c.operaciones;
+      totalsByMonth[m].monto_fin += c.monto_fin;
+      totalsByMonth[m].dif_precio += c.dif_precio;
+      row.push(Math.round(c.clientes_nuevos), c.operaciones, Math.round(c.monto_fin), Math.round(c.dif_precio));
+    });
+    totals.clientes_nuevos += eData.accum.clientes_nuevos;
+    totals.operaciones += eData.accum.operaciones;
+    totals.monto_fin += eData.accum.monto_fin;
+    totals.dif_precio += eData.accum.dif_precio;
+    row.push(Math.round(eData.accum.clientes_nuevos), eData.accum.operaciones, Math.round(eData.accum.monto_fin), Math.round(eData.accum.dif_precio));
+    out.push(row);
+  });
+
+  const totalRow = ['Total general'];
+  months.forEach(m => {
+    const t = totalsByMonth[m];
+    totalRow.push(Math.round(t.clientes_nuevos), t.operaciones, Math.round(t.monto_fin), Math.round(t.dif_precio));
+  });
+  totalRow.push(Math.round(totals.clientes_nuevos), totals.operaciones, Math.round(totals.monto_fin), Math.round(totals.dif_precio));
+  out.push(totalRow);
+
+  const filterSuffix = currentExec === 'ALL' ? 'todos' : currentExec.replace(/\s+/g, '_');
+  const fileName = 'resumen_general_' + selectedYear + '_' + filterSuffix + '.csv';
+  downloadCSV(fileName, out);
+}
+
+function downloadFacturasCSV(){
+  if(!DATA) return;
+  let rows = DATA.facturas_table.slice();
+  if(currentExec !== 'ALL') rows = rows.filter(r => r.ejecutivo === currentExec);
+  rows.sort((a, b) => {
+    const aN = a.promedio_warren === null || a.promedio_warren === undefined;
+    const bN = b.promedio_warren === null || b.promedio_warren === undefined;
+    if(aN && bN) return 0;
+    if(aN) return 1;
+    if(bN) return -1;
+    return b.promedio_warren - a.promedio_warren;
+  });
+
+  const out = [
+    ['Razón social empresa', 'Ejecutivo', 'Promedio Warren', 'Facturas disponibles (CLP)', 'Facturas ya cedidas (CLP)']
+  ];
+  const totals = { disponibles: 0, cedidas: 0 };
+  rows.forEach(r => {
+    totals.disponibles += r.disponibles;
+    totals.cedidas += r.cedidas;
+    out.push([
+      r.razon_social,
+      r.ejecutivo || '',
+      r.promedio_warren === null || r.promedio_warren === undefined ? 'sin dato' : Math.round(r.promedio_warren),
+      Math.round(r.disponibles),
+      Math.round(r.cedidas)
+    ]);
+  });
+  out.push(['Total general', '', '', Math.round(totals.disponibles), Math.round(totals.cedidas)]);
+
+  const filterSuffix = currentExec === 'ALL' ? 'todos' : currentExec.replace(/\s+/g, '_');
+  const fileName = 'facturas_nuevas_' + filterSuffix + '.csv';
+  downloadCSV(fileName, out);
 }
 
 function downloadMesCursoChartsCSV(){
@@ -1572,6 +1663,12 @@ document.getElementById('btnRefresh').addEventListener('click', loadFromCSV);
 
 const btnDownloadCharts = document.getElementById('btnDownloadCharts');
 if(btnDownloadCharts) btnDownloadCharts.addEventListener('click', downloadMesCursoChartsCSV);
+
+const btnDownloadResumen = document.getElementById('btnDownloadResumen');
+if(btnDownloadResumen) btnDownloadResumen.addEventListener('click', downloadResumenCSV);
+
+const btnDownloadFacturas = document.getElementById('btnDownloadFacturas');
+if(btnDownloadFacturas) btnDownloadFacturas.addEventListener('click', downloadFacturasCSV);
 
 loadFromCSV(); // carga inicial: lee CSV y llena tablas
 </script>
