@@ -646,6 +646,59 @@ select#execFilter:focus-visible{
   .mora-table-wrap{ margin-top:8px; overflow:auto; max-height:280px; }
   .mora-table-wrap table{ min-width:520px; font-size:12.5px; }
 
+
+  /* ---------- CESIÓN / FINANCIERAS ---------- */
+  .funnel-row{
+    display:grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap:16px;
+  }
+  @media (max-width:900px){ .funnel-row{ grid-template-columns:1fr; } }
+  .funnel-steps{
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .funnel-step{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px 16px;
+    position:relative;
+  }
+  .funnel-step::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+    background:var(--teal);
+  }
+  .funnel-step.disp::before{ background:var(--gold); }
+  .funnel-step.ced::before{ background:var(--acqua); }
+  .funnel-step .fs-label{
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--ink-soft);
+  }
+  .funnel-step .fs-value{
+    font-family:'Fraunces',serif; font-size:22px; font-weight:600;
+    color:var(--ink); margin-top:4px; letter-spacing:-0.02em;
+  }
+  .funnel-step .fs-meta{
+    font-size:12px; color:#8a8471; margin-top:4px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .funnel-bar{
+    height:10px; border-radius:6px; background:var(--paper-2);
+    overflow:hidden; margin-top:10px;
+  }
+  .funnel-fill{ height:100%; border-radius:6px; }
+  .funnel-fill.total{ background:var(--teal); }
+  .funnel-fill.disp{ background:var(--gold); }
+  .funnel-fill.ced{ background:var(--acqua); }
+  .fin-table-wrap{ max-height:320px; overflow:auto; }
+  .fin-table-wrap table{ min-width:420px; font-size:12.5px; }
+  .conv-pill{
+    display:inline-block; margin-top:12px;
+    background:#e7efe9; border:1px solid #cfe0d6;
+    color:var(--teal-deep); font-weight:600; font-size:12.5px;
+    padding:6px 12px; border-radius:20px;
+  }
+
 </style>
 </head>
 <body>
@@ -774,6 +827,40 @@ select#execFilter:focus-visible{
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- CESIÓN -->
+  <section class="block" id="secCesion">
+    <div class="sec-head"><span class="sec-num">●</span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
+    <p class="sec-desc">Stock de facturas nuevas: qué está disponible para ceder y qué ya tiene financiera. El ranking muestra a qué fondos o bancos se cede el book.</p>
+    <div class="ctx-bar" id="ctxCesion">
+      <span class="ctx-pill" id="ctxCesionPill">—</span>
+      <span class="ctx-text" id="ctxCesionText">Fuente: reporte de facturas nuevas · Nombre financiera vacío o “-” = disponible.</span>
+    </div>
+    <div class="funnel-row">
+      <div class="card">
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Embudo de cesión</h3>
+        <div class="funnel-steps" id="funnelSteps"></div>
+        <div id="funnelConv"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Ranking de financieras</h3>
+        <div class="fin-table-wrap">
+          <table id="tbl-financieras">
+            <thead>
+              <tr>
+                <th class="left">#</th>
+                <th class="left">Financiera</th>
+                <th>Monto cedido</th>
+                <th>% del cedido</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
@@ -2014,7 +2101,7 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Inventario:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
+      html: `<b>Oportunidades:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
         + (pDisp >= 60 ? 'Hay mucho stock sin ceder.' : 'La mayor parte del book ya tiene financiera.')
     });
   }
@@ -2158,12 +2245,116 @@ function renderMora(){
   return { totalMonto, moraMonto, buckets };
 }
 
+
+function renderCesion(){
+  const steps = document.getElementById('funnelSteps');
+  const conv = document.getElementById('funnelConv');
+  const tbody = document.querySelector('#tbl-financieras tbody');
+  const pill = document.getElementById('ctxCesionPill');
+  if(!steps || !tbody) return;
+
+  if(!DATA || !DATA.facturas_table){
+    steps.innerHTML = '<p class="insight-empty">Sin datos de facturas.</p>';
+    tbody.innerHTML = '';
+    if(conv) conv.innerHTML = '';
+    return;
+  }
+
+  let rows = DATA.facturas_table.slice();
+  if(currentExec !== 'ALL') rows = rows.filter(r => r.ejecutivo === currentExec);
+
+  // Prefer recalculate from raw cache for financiera ranking (names)
+  let disp = 0, ced = 0;
+  const byFin = {};
+
+  if(facturaRowsCache && facturaRowsCache.length){
+    const sample = facturaRowsCache[0] || {};
+    const keys = Object.keys(sample);
+    const fRazon = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
+    const fExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
+    const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
+    const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
+
+    facturaRowsCache.forEach(r => {
+      const e = r[fExec] || '';
+      if(currentExec !== 'ALL' && e !== currentExec) return;
+      const monto = toNum(r[fMonto]);
+      const fin = (r[fFin] || '').trim();
+      if(fin && fin !== '-'){
+        ced += monto;
+        const name = fin;
+        if(!byFin[name]) byFin[name] = 0;
+        byFin[name] += monto;
+      } else {
+        disp += monto;
+      }
+    });
+  } else {
+    rows.forEach(r => {
+      disp += r.disponibles || 0;
+      ced += r.cedidas || 0;
+    });
+  }
+
+  const total = disp + ced;
+  const pctDisp = total > 0 ? (disp / total * 100) : 0;
+  const pctCed = total > 0 ? (ced / total * 100) : 0;
+  const conversion = total > 0 ? (ced / total * 100) : 0;
+
+  if(pill){
+    const fl = (typeof filterLabel === 'function') ? filterLabel() : (currentExec === 'ALL' ? 'Todos' : currentExec);
+    pill.textContent = fl + ' · Book ' + fmtCLP(total);
+  }
+
+  steps.innerHTML = [
+    { cls:'total', label:'Book total facturas', monto: total, meta: rows.length ? (facturaRowsCache && facturaRowsCache.length ? 'según CSV de facturas' : 'empresas consolidadas') : 'sin filas', pct: 100 },
+    { cls:'disp', label:'Disponibles (sin ceder)', monto: disp, meta: pctDisp.toFixed(1).replace('.',',') + '% del book', pct: pctDisp },
+    { cls:'ced', label:'Cedidas (con financiera)', monto: ced, meta: pctCed.toFixed(1).replace('.',',') + '% del book', pct: pctCed }
+  ].map(s => `
+    <div class="funnel-step ${s.cls === 'total' ? '' : s.cls}">
+      <div class="fs-label">${s.label}</div>
+      <div class="fs-value">${fmtCLP(s.monto)}</div>
+      <div class="fs-meta">${s.meta}</div>
+      <div class="funnel-bar"><div class="funnel-fill ${s.cls}" style="width:${Math.min(s.pct,100)}%"></div></div>
+    </div>
+  `).join('');
+
+  if(conv){
+    const tone = conversion >= 50 ? 'ok' : 'warn';
+    conv.innerHTML = `<span class="conv-pill">Conversión a cedidas: <b>${conversion.toFixed(1).replace('.',',')}%</b></span>`;
+  }
+
+  const ranked = Object.keys(byFin).map(n => ({ nombre: n, monto: byFin[n] }))
+    .sort((a,b) => b.monto - a.monto);
+
+  if(!ranked.length){
+    tbody.innerHTML = '<tr><td colspan="4" class="left" style="font-weight:400;color:#8a8471">Sin facturas cedidas (todas disponibles o sin financiera).</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = ranked.map((r, i) => {
+    const pct = ced > 0 ? (r.monto / ced * 100) : 0;
+    return `<tr>
+      <td class="left">${i + 1}</td>
+      <td class="left">${escapeHtml(r.nombre)}</td>
+      <td>${fmtCLP(r.monto)}</td>
+      <td>${pct.toFixed(1).replace('.',',')}%</td>
+    </tr>`;
+  }).join('') + `<tr class="total-row">
+      <td></td>
+      <td class="left">Total cedido</td>
+      <td>${fmtCLP(ced)}</td>
+      <td>100%</td>
+    </tr>`;
+}
+
 function renderAll(){
   if(!DATA) return;
   renderKpis();
   updateContextBars();
   renderIntel();
   renderMora();
+  renderCesion();
   renderResumen();
   renderMesCurso();
   renderFacturas();
