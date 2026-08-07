@@ -667,7 +667,7 @@ select#execFilter:focus-visible{
       <input type="text" id="loginRut" autocomplete="username" placeholder="12.345.678-9" inputmode="text">
     </div>
     <button type="button" class="login-btn" id="btnLogin">Ingresar</button>
-    <p class="login-hint">Ejecutivos: solo su cartera · Gerencia: visión completa</p>
+    <p class="login-hint">Ejecutivos: solo su cartera · Gerencia: visión completa · Usuarios en users.csv</p>
   </div>
 </div>
 
@@ -849,14 +849,11 @@ select#execFilter:focus-visible{
    Edita USERS para dar de alta ejecutivos y gerentes.
    ejecutivoKey debe coincidir EXACTO con el nombre en los CSV.
    ========================================================== */
-const USERS = [
-  // Ejecutivos (solo ven su cartera)
-  { nombre: 'Viviana San Martín', rut: '11.111.111-1', rol: 'ejecutivo', ejecutivoKey: 'Viviana San Martín' },
-  { nombre: 'Carmen Serrano',     rut: '22.222.222-2', rol: 'ejecutivo', ejecutivoKey: 'Carmen Serrano' },
-  { nombre: 'Emilio Figueroa',    rut: '33.333.333-3', rol: 'ejecutivo', ejecutivoKey: 'Emilio Figueroa' },
-  // Gerencia (visión completa)
-  { nombre: 'Gerencia Acqua',     rut: '44.444.444-4', rol: 'gerente' },
-];
+// Usuarios se cargan desde users.csv (no hardcodear aquí)
+const CSV_USERS = 'users.csv';
+let USERS = [];
+let usersLoaded = false;
+let usersLoadError = null;
 
 const SESSION_KEY = 'acqua_factoring_session_v1';
 let SESSION = null; // { nombre, rut, rol, ejecutivoKey? }
@@ -866,6 +863,34 @@ function normalizeRut(r){
 }
 function normalizeName(n){
   return String(n || '').trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu,'');
+}
+
+async function loadUsers(){
+  usersLoadError = null;
+  try{
+    const bust = '?t=' + Date.now();
+    const res = await fetch(CSV_USERS + bust);
+    if(!res.ok) throw new Error('No se pudo leer ' + CSV_USERS + ' (HTTP ' + res.status + ')');
+    const text = await res.text();
+    const rows = parseCSV(text);
+    USERS = rows.map(r => {
+      const nombre = (r.nombre || r.Nombre || '').trim();
+      const rut = (r.rut || r.RUT || r.Rut || '').trim();
+      const rol = (r.rol || r.Rol || '').trim().toLowerCase();
+      let ejecutivoKey = (r.ejecutivoKey || r.ejecutivo_key || r['ejecutivo key'] || r.EjecutivoKey || '').trim();
+      if(!ejecutivoKey && rol === 'ejecutivo') ejecutivoKey = nombre;
+      if(rol !== 'ejecutivo' && rol !== 'gerente') return null;
+      if(!nombre || !rut) return null;
+      return { nombre, rut, rol, ejecutivoKey: rol === 'ejecutivo' ? ejecutivoKey : null };
+    }).filter(Boolean);
+    usersLoaded = true;
+    if(!USERS.length) usersLoadError = 'users.csv no tiene usuarios válidos.';
+  } catch(err){
+    usersLoaded = false;
+    usersLoadError = err.message || String(err);
+    USERS = [];
+    console.error(err);
+  }
 }
 
 function findUser(nombre, rut){
@@ -949,11 +974,19 @@ function applyRoleToFilters(){
   }
 }
 
-function attemptLogin(){
+async function attemptLogin(){
   const nombre = document.getElementById('loginNombre').value;
   const rut = document.getElementById('loginRut').value;
   if(!String(nombre).trim() || !String(rut).trim()){
     showLogin('Completa nombre y RUT.');
+    return;
+  }
+  if(!usersLoaded){
+    showLogin('Cargando usuarios…');
+    await loadUsers();
+  }
+  if(usersLoadError){
+    showLogin('Error al leer usuarios: ' + usersLoadError);
     return;
   }
   const user = findUser(nombre, rut);
@@ -1981,7 +2014,7 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Oportunidades:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
+      html: `<b>Inventario:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
         + (pDisp >= 60 ? 'Hay mucho stock sin ceder.' : 'La mayor parte del book ya tiene financiera.')
     });
   }
@@ -2234,15 +2267,26 @@ document.getElementById('btnLogout').addEventListener('click', logout);
 document.getElementById('loginRut').addEventListener('keydown', e => { if(e.key === 'Enter') attemptLogin(); });
 document.getElementById('loginNombre').addEventListener('keydown', e => { if(e.key === 'Enter') attemptLogin(); });
 
-// Bootstrap sesión
-(function boot(){
+// Bootstrap sesión + usuarios desde CSV
+(async function boot(){
+  showLogin('Cargando usuarios…');
+  await loadUsers();
+  if(usersLoadError){
+    showLogin('No se pudo cargar users.csv: ' + usersLoadError + ' — debe estar junto al HTML.');
+    return;
+  }
   const s = loadSession();
   if(s && s.nombre && s.rol){
-    SESSION = s;
-    showApp();
-  } else {
-    showLogin('');
+    // revalidar que el usuario siga en el CSV
+    const still = USERS.find(u => normalizeRut(u.rut) === normalizeRut(s.rut) && normalizeName(u.nombre) === normalizeName(s.nombre));
+    if(still){
+      SESSION = { nombre: still.nombre, rut: still.rut, rol: still.rol, ejecutivoKey: still.ejecutivoKey || null };
+      showApp();
+      return;
+    }
+    clearSession();
   }
+  showLogin('');
 })();
 </script>
 </div><!-- /app-shell -->
