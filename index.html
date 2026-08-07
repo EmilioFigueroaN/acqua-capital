@@ -804,67 +804,6 @@ select#execFilter:focus-visible{
     </div>
   </div>
 
-  <!-- MORA / AGING -->
-  <section class="block" id="secMora">
-    <div class="sec-head"><span class="sec-num">●</span><h2 class="sec-title">Aging de mora</h2></div>
-    <p class="sec-desc">Clasificación del book de operaciones según días de mora del maestro. Días negativos = aún no vence (vigente). Positivos = días en mora.</p>
-    <div class="ctx-bar" id="ctxMora">
-      <span class="ctx-pill" id="ctxMoraPill">—</span>
-      <span class="ctx-text" id="ctxMoraText">Fuente: columna (19) Días de mora y montos del maestro. Respeta el filtro de ejecutivo / sesión.</span>
-    </div>
-    <div class="card">
-      <div class="mora-grid" id="moraTiles"></div>
-      <div class="mora-table-wrap">
-        <table id="tbl-mora">
-          <thead>
-            <tr>
-              <th class="left">Tramo</th>
-              <th>Operaciones</th>
-              <th>Monto (CLP)</th>
-              <th>% del book</th>
-              <th class="left">Comportamiento</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-
-  <!-- CESIÓN -->
-  <section class="block" id="secCesion">
-    <div class="sec-head"><span class="sec-num">●</span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
-    <p class="sec-desc">Stock de facturas nuevas: qué está disponible para ceder y qué ya tiene financiera. El ranking muestra a qué fondos o bancos se cede el book.</p>
-    <div class="ctx-bar" id="ctxCesion">
-      <span class="ctx-pill" id="ctxCesionPill">—</span>
-      <span class="ctx-text" id="ctxCesionText">Fuente: reporte de facturas nuevas · Nombre financiera vacío o “-” = disponible.</span>
-    </div>
-    <div class="funnel-row">
-      <div class="card">
-        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Embudo de cesión</h3>
-        <div class="funnel-steps" id="funnelSteps"></div>
-        <div id="funnelConv"></div>
-      </div>
-      <div class="card">
-        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Ranking de financieras</h3>
-        <div class="fin-table-wrap">
-          <table id="tbl-financieras">
-            <thead>
-              <tr>
-                <th class="left">#</th>
-                <th class="left">Financiera</th>
-                <th>Monto cedido</th>
-                <th>% del cedido</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- SECTION 1 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Resumen General</h2></div>
@@ -927,7 +866,69 @@ select#execFilter:focus-visible{
     <div class="notes" id="notesFacturas"></div>
   </section>
 
-  <footer>Dashboard generado a partir de los archivos fuente. Todos los montos en pesos chilenos (CLP), sin decimales. · Uso interno — Acqua Capital.</footer>
+  
+  <!-- SECTION 4: MORA / AGING -->
+  <section class="block" id="secMora">
+    <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Aging de mora</h2></div>
+    <p class="sec-desc">Clasificación del book de operaciones según días de mora del maestro. Días negativos = aún no vence (vigente). Positivos = días en mora.</p>
+    <div class="ctx-bar" id="ctxMora">
+      <span class="ctx-pill" id="ctxMoraPill">—</span>
+      <span class="ctx-text" id="ctxMoraText">Fuente: columna (19) Días de mora y montos del maestro. Respeta el filtro de ejecutivo / sesión.</span>
+    </div>
+    <div class="card">
+      <div class="mora-grid" id="moraTiles"></div>
+      <div class="mora-table-wrap">
+        <table id="tbl-mora">
+          <thead>
+            <tr>
+              <th class="left">Tramo</th>
+              <th>Operaciones</th>
+              <th>Monto (CLP)</th>
+              <th>% del book</th>
+              <th class="left">Comportamiento</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- SECTION 5: CESIÓN -->
+  <section class="block" id="secCesion">
+    <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
+    <p class="sec-desc">Stock de facturas nuevas: qué está disponible para ceder y qué ya tiene financiera. El ranking muestra a qué fondos o bancos se cede el book.</p>
+    <div class="ctx-bar" id="ctxCesion">
+      <span class="ctx-pill" id="ctxCesionPill">—</span>
+      <span class="ctx-text" id="ctxCesionText">Fuente: reporte de facturas nuevas · Nombre financiera vacío o “-” = disponible.</span>
+    </div>
+    <div class="funnel-row">
+      <div class="card">
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Embudo de cesión</h3>
+        <div class="funnel-steps" id="funnelSteps"></div>
+        <div id="funnelConv"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Ranking de financieras</h3>
+        <div class="fin-table-wrap">
+          <table id="tbl-financieras">
+            <thead>
+              <tr>
+                <th class="left">#</th>
+                <th class="left">Financiera</th>
+                <th>Monto cedido</th>
+                <th>% del cedido</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<footer>Dashboard generado a partir de los archivos fuente. Todos los montos en pesos chilenos (CLP), sin decimales. · Uso interno — Acqua Capital.</footer>
 </div>
 
 <script>
