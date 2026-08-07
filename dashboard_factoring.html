@@ -2247,6 +2247,38 @@ function renderMora(){
 }
 
 
+
+/** Unifica nombres de financieras para no duplicar por mayúsculas / variantes. */
+function normalizeFinanciera(name){
+  let s = String(name || '').trim();
+  if(!s || s === '-') return '';
+  s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // quita tildes
+  s = s.toUpperCase().replace(/\s+/g, ' ').trim();
+  s = s.replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+  // Alias: variantes conocidas → nombre canónico (MAYÚSCULAS)
+  const rules = [
+    [/^BANCO\s+SANTANDER/, 'BANCO SANTANDER'],
+    [/^SANTANDER/, 'BANCO SANTANDER'],
+    [/^FACTORING\s+Y\s+SERVICIOS\s+DE\s+COBRANZA/, 'FACTORING Y SERVICIOS DE COBRANZA'],
+    [/^FACTORING\s+SECURITY/, 'FACTORING SECURITY S.A.'],
+    [/^CBP\s+FINANCIA/, 'CBP FINANCIA CAPITAL'],
+    [/^FINANCIA\s+CAPITAL/, 'FINANCIA CAPITAL'],
+    [/^BLANCO\s+FINANCIERO/, 'BLANCO FINANCIERO'],
+    [/^VISION\s+CAPITAL/, 'VISION CAPITAL'],
+    [/^BANCO\s+DE\s+CHILE/, 'BANCO DE CHILE'],
+    [/^BANCO\s+CONSORCIO/, 'BANCO CONSORCIO'],
+    [/^CORPBANCA/, 'CORPBANCA'],
+    [/^MOONK/, 'MOONK FACTORING'],
+    [/^PENTA\s+FINANCIERO/, 'PENTA FINANCIERO'],
+    [/^NUVIA\s+CAPITAL/, 'NUVIA CAPITAL'],
+    [/^PROGRESO/, 'PROGRESO S.A.'],
+  ];
+  for(const [re, canon] of rules){
+    if(re.test(s)) return canon;
+  }
+  return s;
+}
+
 function renderCesion(){
   const steps = document.getElementById('funnelSteps');
   const conv = document.getElementById('funnelConv');
@@ -2283,7 +2315,8 @@ function renderCesion(){
       const fin = (r[fFin] || '').trim();
       if(fin && fin !== '-'){
         ced += monto;
-        const name = fin;
+        const name = normalizeFinanciera(fin);
+        if(!name){ disp += monto; return; }
         if(!byFin[name]) byFin[name] = 0;
         byFin[name] += monto;
       } else {
