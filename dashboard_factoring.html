@@ -859,6 +859,44 @@ select#execFilter:focus-visible{
     display:inline-flex; align-items:center; max-width:100%;
   }
 
+  .conc-row details.deu-drop{
+    margin-top:6px;
+    border-radius:8px;
+    background:var(--paper);
+    border:1px solid var(--line);
+  }
+  .conc-row details.deu-drop > summary{
+    cursor:pointer; list-style:none;
+    font-size:11.5px; font-weight:600; color:var(--teal-deep);
+    padding:6px 10px; user-select:none;
+    display:flex; align-items:center; gap:6px;
+  }
+  .conc-row details.deu-drop > summary::-webkit-details-marker{ display:none; }
+  .conc-row details.deu-drop > summary::before{
+    content:'▸'; font-size:10px; transition:transform .15s ease;
+  }
+  .conc-row details.deu-drop[open] > summary::before{ content:'▾'; }
+  .conc-row .deu-list{
+    padding:4px 10px 8px; margin:0;
+    list-style:none; display:flex; flex-direction:column; gap:4px;
+  }
+  .conc-row .deu-list li{
+    display:flex; justify-content:space-between; gap:10px;
+    font-size:11.5px; color:var(--ink);
+    padding:3px 0; border-top:1px solid rgba(214,207,185,0.5);
+  }
+  .conc-row .deu-list li .dn{
+    font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    max-width:70%;
+  }
+  .conc-row .deu-list li .dv{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .conc-row .deu-empty{
+    font-size:11.5px; color:#8a8471; padding:4px 10px 8px;
+  }
+
 </style>
 </head>
 <body>
@@ -966,8 +1004,8 @@ select#execFilter:focus-visible{
   <div class="intel-stack" id="intelGrid">
     <div class="intel-grid">
       <div class="intel-card">
-        <h3>Concentración por cliente</h3>
-        <p class="intel-sub">Muestra qué parte del dinero adelantado concentra cada cliente (la empresa a la que le compramos la factura). Si un solo cliente supera el <b>25%</b>, hay más riesgo de dependencia.</p>
+        <h3>Concentración por cliente (cedente)</h3>
+        <p class="intel-sub">Estas son las empresas que emitieron las facturas: a ellas les deben el pago sus compradores (deudores). Nosotros les adelantamos dinero al comprarles esas facturas. El gráfico muestra qué parte del total adelantado se concentra en cada una. Si una sola supera el <b>25%</b>, hay más riesgo de depender demasiado de ese cliente. Despliega cada cliente para ver su <b>top 5 de deudores</b>.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxConcPill">—</span>
           <span class="ctx-text" id="ctxConcText">Se calcula con las operaciones reales del maestro. Respeta el filtro de ejecutivo elegido arriba.</span>
@@ -977,8 +1015,8 @@ select#execFilter:focus-visible{
         <p class="conc-threshold">Colores de alerta: rojo si un cliente concentra 25% o más · amarillo desde 15% · verde bajo 15%.</p>
       </div>
       <div class="intel-card">
-        <h3>Concentración por deudor</h3>
-        <p class="intel-sub">Muestra a quién le deben las facturas que financiamos (el deudor es quien debe pagar). Sirve para ver si dependemos demasiado de un solo pagador.</p>
+        <h3>Concentración por deudor (quien paga)</h3>
+        <p class="intel-sub">Estas son las empresas que deben pagar las facturas (deudores). Le deben a nuestros clientes; después de la cesión el cobro puede quedar a cargo nuestro o de la financiera. Sirve para ver si dependemos demasiado de un solo pagador.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxDeudorPill">—</span>
           <span class="ctx-text" id="ctxDeudorText">Se calcula con las operaciones reales del maestro. Respeta el filtro de ejecutivo elegido arriba.</span>
@@ -2510,7 +2548,7 @@ function renderConcentration(){
   const pill = document.getElementById('ctxConcPill');
   if(!meters) return { book:0, items:[], top1:0, top3:0, top5:0 };
 
-  // Clientes reales = Empresa solicitante (cedente) del maestro de operaciones
+  // Clientes = Empresa solicitante; por cada uno, top deudores = Empresa deudora
   const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
   if(!rows.length){
     meters.innerHTML = '<p class="insight-empty">Sin operaciones en el maestro para calcular concentración de clientes.</p>';
@@ -2521,24 +2559,41 @@ function renderConcentration(){
 
   const sample = rows[0] || {};
   const keys = Object.keys(sample);
-  const colName = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+  const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+  const colDeu = keys.find(k => /empresa\s*deudora/i.test(k) && !/rut/i.test(k)) || '(28)Empresa deudora';
   const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
   const colAlt = keys.find(k => /\(43\)/.test(k) || /monto final adelantado/i.test(k));
   const colGiro = keys.find(k => /\(46\)/.test(k) || /monto a giro/i.test(k));
   const colBruto = keys.find(k => /\(12\)/.test(k) || /monto facturas/i.test(k));
 
-  const by = {};
-  rows.forEach(r => {
-    const name = ((r[colName] || 'Sin nombre') + '').trim() || 'Sin nombre';
+  function rowMonto(r){
     let monto = colMonto ? toNum(r[colMonto]) : 0;
     if(monto === 0 && colAlt) monto = toNum(r[colAlt]);
     if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
     if(monto === 0 && colBruto) monto = toNum(r[colBruto]);
-    if(!by[name]) by[name] = 0;
-    by[name] += monto;
+    return monto;
+  }
+
+  // by[cliente] = { total, deudores: { nombre: monto } }
+  const by = {};
+  rows.forEach(r => {
+    const cli = ((r[colCli] || 'Sin nombre') + '').trim() || 'Sin nombre';
+    const deu = ((r[colDeu] || 'Sin deudor') + '').trim() || 'Sin deudor';
+    const monto = rowMonto(r);
+    if(!by[cli]) by[cli] = { total:0, deudores:{} };
+    by[cli].total += monto;
+    if(!by[cli].deudores[deu]) by[cli].deudores[deu] = 0;
+    by[cli].deudores[deu] += monto;
   });
 
-  const items = Object.keys(by).map(n => ({ nombre: n, total: by[n] })).filter(x => x.total > 0);
+  const items = Object.keys(by).map(n => ({
+    nombre: n,
+    total: by[n].total,
+    deudores: Object.keys(by[n].deudores)
+      .map(d => ({ nombre: d, total: by[n].deudores[d] }))
+      .filter(x => x.total > 0)
+      .sort((a,b) => b.total - a.total)
+  })).filter(x => x.total > 0);
   items.sort((a,b) => b.total - a.total);
   const book = items.reduce((s,x) => s + x.total, 0);
 
@@ -2555,28 +2610,46 @@ function renderConcentration(){
     const pct = (it.total / book) * 100;
     const cls = pct >= 25 ? 'danger' : (pct >= 15 ? 'warn' : '');
     const safe = escapeHtml(it.nombre);
+    const top5 = it.deudores.slice(0, 5);
+    let drop;
+    if(!top5.length){
+      drop = `<details class="deu-drop"><summary>Top deudores</summary><div class="deu-empty">Sin deudores con monto para este cliente.</div></details>`;
+    } else {
+      const lis = top5.map((d, i) => {
+        const dp = it.total > 0 ? (d.total / it.total * 100) : 0;
+        return `<li>
+          <span class="dn" title="${escapeHtml(d.nombre)}">${i+1}. ${escapeHtml(d.nombre)}</span>
+          <span class="dv">${dp.toFixed(0)}% · ${fmtCLP(d.total)}</span>
+        </li>`;
+      }).join('');
+      drop = `<details class="deu-drop">
+        <summary>Top ${top5.length} deudor${top5.length===1?'':'es'} de este cliente</summary>
+        <ul class="deu-list">${lis}</ul>
+      </details>`;
+    }
     return `<div class="conc-row">
       <div class="conc-top">
         <span class="name" title="${safe}">${safe}</span>
         <span class="pct">${pct.toFixed(1).replace('.',',')}% · ${fmtCLP(it.total)}</span>
       </div>
       <div class="conc-track"><div class="conc-fill ${cls}" style="width:${Math.min(pct,100)}%"></div></div>
+      ${drop}
     </div>`;
   }).join('');
 
   const top1 = items[0] ? (items[0].total / book) * 100 : 0;
   const top3 = items.slice(0,3).reduce((s,x)=>s+x.total,0) / book * 100;
-  const top5 = items.slice(0,5).reduce((s,x)=>s+x.total,0) / book * 100;
+  const top5pct = items.slice(0,5).reduce((s,x)=>s+x.total,0) / book * 100;
 
   if(summary){
     summary.innerHTML = `
       <div><div class="s-label">Top 1</div><div class="s-val">${top1.toFixed(1).replace('.',',')}%</div></div>
       <div><div class="s-label">Top 3</div><div class="s-val">${top3.toFixed(1).replace('.',',')}%</div></div>
-      <div><div class="s-label">Top 5</div><div class="s-val">${top5.toFixed(1).replace('.',',')}%</div></div>
+      <div><div class="s-label">Top 5</div><div class="s-val">${top5pct.toFixed(1).replace('.',',')}%</div></div>
     `;
   }
 
-  return { book, items, top1, top3, top5 };
+  return { book, items, top1, top3, top5: top5pct };
 }
 
 function renderInsights(conc){
