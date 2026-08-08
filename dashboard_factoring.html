@@ -1616,6 +1616,7 @@ function buildData(masterRows, facturaRows, selectedYear){
   const keys = Object.keys(sample);
   const colExec   = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
   const colNuevo  = keys.find(k => /cliente\s*nuevo/i.test(k)) || '(24)Cliente nuevo';
+  const colCli    = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
   const colFecha  = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
   const colInteres= keys.find(k => /\(41\)/.test(k)) || keys.find(k => /interes/i.test(k) && !/tasa/i.test(k)) || null;
   const colMonto  = keys.find(k => /\(45\).*anticipo/i.test(k) || /^monto anticipo$/i.test(k)) || keys.find(k => /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
@@ -1650,40 +1651,53 @@ function buildData(masterRows, facturaRows, selectedYear){
     months.forEach(m => { summary.ejecutivos[e].months[m] = emptyMetrics(); });
   });
 
+  // Sets para no contar el mismo cliente varias veces en el mismo mes
+  const seenNuevoMes = {}; // key: exec|ym|cliente
+  const seenNuevoAcc = {}; // key: exec|cliente
+  const seenNuevoMesTot = {}; // key: ym|cliente
+  const seenNuevoAccTot = {}; // key: cliente
+
   masterRows.forEach(r => {
     const e = r[colExec] || '';
     if(!e || !summary.ejecutivos[e]) return;
     const ym = parseYM(r[colFecha]);
     if(!ym || !summary.ejecutivos[e].months[ym]) return;
 
-    // Cliente nuevo: en export real es YYYY-MM (mes en que el cliente es nuevo).
-    // También acepta SI/NO del formato simplificado.
+    // Cliente nuevo: YYYY-MM = mes de alta del cliente, o SI/NO.
+    // Se cuenta 1 vez por cliente (Empresa solicitante) en el periodo.
     const nuevoRaw = String(r[colNuevo]||'').trim();
-    const esNuevo = (/^SI$/i.test(nuevoRaw) || parseYM(nuevoRaw) === ym) ? 1 : 0;
-    // Monto: (45)Monto anticipo suele venir 0; usar final adelantado o giro real
+    const esNuevoFlag = /^SI$/i.test(nuevoRaw) || parseYM(nuevoRaw) === ym;
+    const cliName = String(r[colCli] || r[colNuevo] || ('op-' + Math.random())).trim() || 'sin-nombre';
+
     let monto = toNum(r[colMonto]);
     if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
     if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
     const dif = colInteres ? toNum(r[colInteres]) : 0;
 
     const cell = summary.ejecutivos[e].months[ym];
-    cell.clientes_nuevos += esNuevo;
+    if(esNuevoFlag){
+      const k1 = e + '|' + ym + '|' + cliName;
+      if(!seenNuevoMes[k1]){ seenNuevoMes[k1] = true; cell.clientes_nuevos += 1; }
+      const k2 = e + '|' + cliName;
+      if(!seenNuevoAcc[k2]){ seenNuevoAcc[k2] = true; summary.ejecutivos[e].accum.clientes_nuevos += 1; }
+      const k3 = ym + '|' + cliName;
+      if(!seenNuevoMesTot[k3]){ seenNuevoMesTot[k3] = true; summary.total.months[ym].clientes_nuevos += 1; }
+      const k4 = cliName;
+      if(!seenNuevoAccTot[k4]){ seenNuevoAccTot[k4] = true; summary.total.accum.clientes_nuevos += 1; }
+    }
     cell.operaciones += 1;
     cell.monto_fin += monto;
     cell.dif_precio += dif;
 
     const acc = summary.ejecutivos[e].accum;
-    acc.clientes_nuevos += esNuevo;
     acc.operaciones += 1;
     acc.monto_fin += monto;
     acc.dif_precio += dif;
 
-    summary.total.months[ym].clientes_nuevos += esNuevo;
     summary.total.months[ym].operaciones += 1;
     summary.total.months[ym].monto_fin += monto;
     summary.total.months[ym].dif_precio += dif;
 
-    summary.total.accum.clientes_nuevos += esNuevo;
     summary.total.accum.operaciones += 1;
     summary.total.accum.monto_fin += monto;
     summary.total.accum.dif_precio += dif;
@@ -1698,7 +1712,7 @@ function buildData(masterRows, facturaRows, selectedYear){
   if(colInteres){
     notes.push('Se utilizó la columna "' + colInteres + '" como Diferencia de precio (interés).');
     notes.push('Monto anticipo: se usa (45); si viene 0, se toma (43) Monto final adelantado o (46) Monto a giro real.');
-    notes.push('Cliente nuevo: se cuenta cuando el campo trae SI o un mes YYYY-MM igual al mes de la operación.');
+    notes.push('Cliente nuevo: se cuenta 1 vez por empresa (solicitante) cuando el campo trae SI o un mes YYYY-MM igual al mes de la operación.');
   } else {
     notes.push('No se encontró columna de interés en el maestro; Diferencia de precio = 0.');
   }
@@ -2220,13 +2234,19 @@ function metricsForMonthRaw(ym){
   const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
   const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
   const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
+  const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
   const t = emptyMetrics();
+  const seen = {};
   masterRowsCache.forEach(r => {
     const e = r[colExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
     if(parseYM(r[colFecha]) !== ym) return;
     const nuevoRaw = String(r[colNuevo]||'').trim();
-    t.clientes_nuevos += (/^SI$/i.test(nuevoRaw) || parseYM(nuevoRaw) === ym) ? 1 : 0;
+    const esNuevo = /^SI$/i.test(nuevoRaw) || parseYM(nuevoRaw) === ym;
+    if(esNuevo){
+      const cli = String(r[colCli]||'').trim() || ('op-' + Object.keys(seen).length);
+      if(!seen[cli]){ seen[cli] = true; t.clientes_nuevos += 1; }
+    }
     t.operaciones += 1;
     let monto = toNum(r[colMonto]);
     if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
@@ -2256,6 +2276,8 @@ function metricsForDateRange(fromStr, toStr){
   const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
   const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
 
+  const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+  const seen = {};
   masterRowsCache.forEach(r => {
     const e = r[colExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
@@ -2263,8 +2285,14 @@ function metricsForDateRange(fromStr, toStr){
     if(!d) return;
     if(startFrom && d < startFrom) return;
     if(endTo && d > endTo) return;
+    const opYm = parseYM(r[colFecha]);
     const nuevoRaw = String(r[colNuevo]||'').trim();
-    t.clientes_nuevos += /^SI$/i.test(nuevoRaw) ? 1 : 0;
+    // SI, o el mes de alta del cliente coincide con el mes de esta operación
+    const esNuevo = /^SI$/i.test(nuevoRaw) || (opYm && parseYM(nuevoRaw) === opYm);
+    if(esNuevo){
+      const cli = String(r[colCli]||'').trim() || ('op-' + Object.keys(seen).length);
+      if(!seen[cli]){ seen[cli] = true; t.clientes_nuevos += 1; }
+    }
     t.operaciones += 1;
     let monto = toNum(r[colMonto]);
     if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
