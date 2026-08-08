@@ -747,6 +747,45 @@ select#execFilter:focus-visible{
   .detail-scroll{ max-height:380px; overflow:auto; margin-top:8px; }
   .detail-scroll table{ min-width:900px; font-size:12px; }
 
+
+  .versus-wrap{
+    margin-top:16px; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:12px;
+  }
+  .versus-card{
+    background:var(--paper); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px;
+  }
+  .versus-card .v-label{
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.04em; color:var(--ink-soft); margin-bottom:8px;
+  }
+  .versus-bars{ display:flex; flex-direction:column; gap:6px; }
+  .versus-row{ display:flex; align-items:center; gap:8px; font-size:12px; }
+  .versus-row .v-name{ width:72px; color:var(--ink-soft); flex-shrink:0; }
+  .versus-row .v-track{
+    flex:1; height:10px; background:var(--paper-2); border-radius:5px; overflow:hidden;
+  }
+  .versus-row .v-fill{ height:100%; border-radius:5px; background:var(--teal); }
+  .versus-row .v-fill.base{ background:#c5b89a; }
+  .versus-row .v-amt{
+    width:88px; text-align:right; font-family:'IBM Plex Mono',monospace;
+    font-size:11px; color:var(--ink);
+  }
+  .sec-filters{
+    display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center;
+    margin:0 0 12px; padding:10px 14px;
+    background:rgba(255,253,249,0.9); border:1px solid var(--line); border-radius:12px;
+  }
+  .sec-filters label{
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.04em; color:var(--ink-soft);
+  }
+  .sec-filters select{
+    font-family:inherit; font-size:13px; padding:6px 10px;
+    border:1.5px solid var(--line); border-radius:8px; background:var(--white);
+  }
+
 </style>
 </head>
 <body>
@@ -850,6 +889,12 @@ select#execFilter:focus-visible{
 
 
   <!-- INTEL: concentración + insights -->
+  <div class="card" id="versusCard" style="margin-top:16px;">
+    <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Versus · actual vs base</h3>
+    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Barras comparativas del mes KPI contra la base elegida (mes anterior, mismo mes año ant., o promedio).</p>
+    <div class="versus-wrap" id="versusBars"></div>
+  </div>
+
   <div class="intel-grid" id="intelGrid">
     <div class="intel-card">
       <h3>Radar de concentración</h3>
@@ -874,7 +919,7 @@ select#execFilter:focus-visible{
   </div>
 
   <!-- SECTION 1 -->
-  <section class="block">
+  <section class="block" id="secResumen" hidden>
     <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Resumen General</h2></div>
     <p class="sec-desc">Los 12 meses del año seleccionado, agrupados por ejecutivo. Usa las flechas de Año para retroceder o avanzar. Clientes nuevos según <code>(24)Cliente nuevo</code>; operaciones, monto de anticipo y diferencia de precio según <code>(47)Fecha creacion</code>.</p>
     <div class="card">
@@ -888,7 +933,7 @@ select#execFilter:focus-visible{
 
   <!-- SECTION 2 -->
   <section class="block">
-    <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Mes en curso</h2></div>
+    <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Mes en curso</h2></div>
     <p class="sec-desc" id="mesCursoDesc">Detalle del mes calendario actual: ranking de ejecutivos por monto anticipado y diferencia de precio.</p>
     <div class="ctx-bar" id="ctxMesCurso">
       <span class="ctx-pill" id="ctxMesCursoPill">—</span>
@@ -918,8 +963,26 @@ select#execFilter:focus-visible{
 
   <!-- SECTION 3 -->
   <section class="block">
-    <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Facturas nuevas</h2></div>
+    <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Facturas nuevas</h2></div>
     <p class="sec-desc">Estado del book de facturas nuevas, agrupado por empresa. Sirve para ver qué está disponible para ceder y qué ya tiene financiera.</p>
+    <div class="sec-filters" id="factFilters">
+      <label for="factEstadoFilter">Estado</label>
+      <select id="factEstadoFilter">
+        <option value="ALL">Todos</option>
+        <option value="disp">Solo disponibles</option>
+        <option value="ced">Solo cedidas</option>
+      </select>
+      <label for="factWarrenFilter">Warren</label>
+      <select id="factWarrenFilter">
+        <option value="ALL">Todos</option>
+        <option value="alto">Alto (≥ 400)</option>
+        <option value="medio">Medio (200–399)</option>
+        <option value="bajo">Bajo (&lt; 200)</option>
+        <option value="sin">Sin dato</option>
+      </select>
+      <label for="factSearch">Buscar</label>
+      <input type="search" id="factSearch" placeholder="Empresa o deudor…" style="font-family:inherit;font-size:13px;padding:6px 10px;border:1.5px solid var(--line);border-radius:8px;min-width:180px;">
+    </div>
     <div class="ctx-bar" id="ctxFacturas">
       <span class="ctx-pill" id="ctxFacturasPill">—</span>
       <span class="ctx-text" id="ctxFacturasText"><b>Disponibles</b> = sin financiera (o “-”). <b>Cedidas</b> = con banco/fondo asignado. <b>Warren</b> = promedio del score; “Sin registro” no entra al cálculo.</span>
@@ -979,7 +1042,7 @@ select#execFilter:focus-visible{
   
   <!-- COMISIONES + CARTERA -->
   <section class="block" id="secComisiones">
-    <div class="sec-head"><span class="sec-num">●</span><h2 class="sec-title">Comisiones y concentración de cartera</h2></div>
+    <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Comisiones y concentración de cartera</h2></div>
     <p class="sec-desc">Comisiones del maestro (Comisión RC y gastos asociados). Concentración de la cartera operativa por cliente (cedente) y por deudor, con el filtro de periodo y ejecutivo.</p>
     <div class="ctx-bar" id="ctxComisiones">
       <span class="ctx-pill" id="ctxComisionesPill">—</span>
@@ -1022,6 +1085,18 @@ select#execFilter:focus-visible{
       <span class="ctx-text" id="ctxMoraText">Fuente: (19) Días de mora y montos del maestro. Respeta filtro de ejecutivo / sesión.</span>
     </div>
     <div class="card">
+      <div class="sec-filters" id="moraFilters" style="margin-bottom:12px;">
+        <label for="moraTramoFilter">Ver tramo</label>
+        <select id="moraTramoFilter">
+          <option value="ALL">Todos los tramos</option>
+          <option value="vigente">Vigente</option>
+          <option value="m015">Mora 0–15</option>
+          <option value="m1530">Mora 15–30</option>
+          <option value="m2">Mora 31–60</option>
+          <option value="m3">Mora 60+</option>
+        </select>
+      </div>
+
       <div class="mora-pct-banner" id="moraPctBanner"></div>
       <div class="mora-grid" id="moraTiles"></div>
       <div class="mora-table-wrap">
@@ -2355,9 +2430,12 @@ function renderMora(){
     b.comps[c] = (b.comps[c] || 0) + 1;
   });
 
-  const order = ['vigente','m015','m1530','m2','m3'];
-  const totalMonto = order.reduce((s,k) => s + buckets[k].monto, 0);
-  const totalOps = order.reduce((s,k) => s + buckets[k].ops, 0);
+  let order = ['vigente','m015','m1530','m2','m3'];
+  const tramoSel = document.getElementById('moraTramoFilter')?.value || 'ALL';
+  if(tramoSel !== 'ALL') order = order.filter(k => k === tramoSel);
+  const orderAll = ['vigente','m015','m1530','m2','m3'];
+  const totalMonto = orderAll.reduce((s,k) => s + buckets[k].monto, 0);
+  const totalOps = orderAll.reduce((s,k) => s + buckets[k].ops, 0);
   const moraMonto = buckets.m015.monto + buckets.m1530.monto + buckets.m2.monto + buckets.m3.monto;
   const moraOps = buckets.m015.ops + buckets.m1530.ops + buckets.m2.ops + buckets.m3.ops;
   const pctMora = totalMonto > 0 ? (moraMonto / totalMonto * 100) : 0;
@@ -2583,10 +2661,15 @@ function renderDeudorConcentration(){
   const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
   const fDeudor = keys.find(k => /raz[oó]n\s*social\s*deudor/i.test(k)) || keys.find(k => /deudor/i.test(k) && /raz[oó]n|nombre/i.test(k)) || 'Razón social deudor';
 
+  const filters = getFactSectionFilters();
+  const fEmp = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
+  const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
+  const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
   const byD = {};
   facturaRowsCache.forEach(r => {
     const e = r[fExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
+    if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters)) return;
     const d = (r[fDeudor] || 'Sin deudor').trim() || 'Sin deudor';
     const m = toNum(r[fMonto]);
     if(!byD[d]) byD[d] = 0;
@@ -2689,6 +2772,35 @@ function renderWarrenSeg(){
   }).join('');
 }
 
+
+function getFactSectionFilters(){
+  return {
+    estado: document.getElementById('factEstadoFilter')?.value || 'ALL',
+    warren: document.getElementById('factWarrenFilter')?.value || 'ALL',
+    search: (document.getElementById('factSearch')?.value || '').trim().toLowerCase()
+  };
+}
+
+function passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters){
+  const fin = (r[fFin] || '').trim();
+  const isCed = fin && fin !== '-';
+  if(filters.estado === 'disp' && isCed) return false;
+  if(filters.estado === 'ced' && !isCed) return false;
+  let w = null;
+  const wRaw = r[fWar];
+  if(wRaw !== undefined && wRaw !== null && String(wRaw).trim() !== '' && !/^sin/i.test(String(wRaw))){
+    const n = parseFloat(String(wRaw).replace(/[^\d.\-]/g,''));
+    if(!isNaN(n)) w = n;
+  }
+  const band = warrenBand(w);
+  if(filters.warren !== 'ALL' && band !== filters.warren) return false;
+  if(filters.search){
+    const blob = ((r[fEmp]||'') + ' ' + (r[fDeudor]||'')).toLowerCase();
+    if(!blob.includes(filters.search)) return false;
+  }
+  return true;
+}
+
 function renderFacturasDetalle(){
   const tbody = document.querySelector('#tbl-facturas-detalle tbody');
   if(!tbody) return;
@@ -2709,9 +2821,10 @@ function renderFacturasDetalle(){
   const fWar = keys.find(k => /warren\s*2/i.test(k)) || 'Warren 2';
   const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
 
+  const filters = getFactSectionFilters();
   let rows = facturaRowsCache.filter(r => {
-    if(currentExec === 'ALL') return true;
-    return (r[fExec] || '') === currentExec;
+    if(currentExec !== 'ALL' && (r[fExec] || '') !== currentExec) return false;
+    return passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters);
   });
 
   // limit display for performance but export all filtered
@@ -2982,9 +3095,90 @@ function renderCarteraSide(kind){
   }
 }
 
+
+function renderVersus(){
+  const el = document.getElementById('versusBars');
+  if(!el || !DATA) return;
+  const ym = document.getElementById('kpiMonth')?.value || DATA.generated_current_month;
+  const baseMode = document.getElementById('kpiBase')?.value || 'prev';
+  const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
+
+  function metricsFor(month){
+    const m = { ops:0, monto:0, dif:0, nuevos:0 };
+    execs.forEach(e => {
+      const ed = DATA.summary.ejecutivos[e];
+      if(!ed) return;
+      const c = ed.months[month] || emptyMetrics();
+      m.ops += c.operaciones;
+      m.monto += c.monto_fin;
+      m.dif += c.dif_precio;
+      m.nuevos += c.clientes_nuevos;
+    });
+    return m;
+  }
+
+  function baseMonth(ym, mode){
+    const [y, mo] = ym.split('-').map(Number);
+    if(mode === 'prev'){
+      let pm = mo - 1, py = y;
+      if(pm < 1){ pm = 12; py--; }
+      return py + '-' + String(pm).padStart(2,'0');
+    }
+    if(mode === 'yoy') return (y-1) + '-' + String(mo).padStart(2,'0');
+    return null; // avg handled separately
+  }
+
+  const cur = metricsFor(ym);
+  let base = { ops:0, monto:0, dif:0, nuevos:0 };
+  let baseLabel = 'Base';
+  if(baseMode === 'prev' || baseMode === 'yoy'){
+    const bm = baseMonth(ym, baseMode);
+    base = metricsFor(bm);
+    baseLabel = baseMode === 'prev' ? 'Mes ant.' : 'Año ant.';
+  } else {
+    // average
+    const months = DATA.months || [];
+    let n = 0;
+    months.forEach(m => {
+      const x = metricsFor(m);
+      if(x.ops > 0 || x.monto > 0){
+        base.ops += x.ops; base.monto += x.monto; base.dif += x.dif; base.nuevos += x.nuevos; n++;
+      }
+    });
+    if(n > 0){ base.ops /= n; base.monto /= n; base.dif /= n; base.nuevos /= n; }
+    baseLabel = 'Promedio';
+  }
+
+  const items = [
+    { key:'ops', label:'Operaciones', cur: cur.ops, base: base.ops, money:false },
+    { key:'monto', label:'Monto anticipo', cur: cur.monto, base: base.monto, money:true },
+    { key:'dif', label:'Dif. de precio', cur: cur.dif, base: base.dif, money:true },
+    { key:'nuevos', label:'Clientes nuevos', cur: cur.nuevos, base: base.nuevos, money:false },
+  ];
+
+  el.innerHTML = items.map(it => {
+    const max = Math.max(it.cur, it.base, 1);
+    const pctC = Math.min(100, (it.cur / max) * 100);
+    const pctB = Math.min(100, (it.base / max) * 100);
+    const fmt = v => it.money ? fmtCLP(v) : fmtInt(Math.round(v));
+    return `<div class="versus-card">
+      <div class="v-label">${it.label}</div>
+      <div class="versus-bars">
+        <div class="versus-row"><span class="v-name">Actual</span>
+          <div class="v-track"><div class="v-fill" style="width:${pctC}%"></div></div>
+          <span class="v-amt">${fmt(it.cur)}</span></div>
+        <div class="versus-row"><span class="v-name">${baseLabel}</span>
+          <div class="v-track"><div class="v-fill base" style="width:${pctB}%"></div></div>
+          <span class="v-amt">${fmt(it.base)}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderAll(){
   if(!DATA) return;
   renderKpis();
+  renderVersus();
   updateContextBars();
   renderIntel();
   renderComisiones();
@@ -3108,6 +3302,24 @@ if(dateModeEl){
     if(el) el.addEventListener('change', refreshDates);
   });
   applyDateMode();
+}
+
+
+['factEstadoFilter','factWarrenFilter'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', () => { if(DATA){ renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); } });
+});
+const factSearch = document.getElementById('factSearch');
+if(factSearch){
+  let t;
+  factSearch.addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(() => { if(DATA){ renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); } }, 250);
+  });
+}
+const moraTramoFilter = document.getElementById('moraTramoFilter');
+if(moraTramoFilter){
+  moraTramoFilter.addEventListener('change', () => { if(DATA) renderMora(); });
 }
 
 document.getElementById('btnLogin').addEventListener('click', attemptLogin);
