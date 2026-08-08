@@ -376,6 +376,9 @@ select#execFilter:focus-visible{
   .kpi-mode-block{
     display:inline-flex; flex-wrap:wrap; align-items:center; gap:12px 14px;
   }
+  .kpi-mode-block[hidden]{
+    display:none !important;
+  }
   .kpi-hint{
     font-size:12px; color:var(--ink-soft); font-weight:500;
     background:#eef4f2; border:1px solid #cfe0d6; color:var(--teal-deep);
@@ -910,13 +913,13 @@ select#execFilter:focus-visible{
       <option value="month">Por mes</option>
     </select>
 
-    <span id="kpiDayWrap" class="kpi-mode-block" hidden>
+    <span id="kpiDayWrap" class="kpi-mode-block" hidden style="display:none">
       <label for="kpiDay">Día</label>
       <input type="date" id="kpiDay" aria-label="Día a analizar">
       <span class="kpi-hint">Se compara con el día anterior</span>
     </span>
 
-    <span id="kpiWeekWrap" class="kpi-mode-block" hidden>
+    <span id="kpiWeekWrap" class="kpi-mode-block" hidden style="display:none">
       <label for="kpiWeek">Semana (lunes)</label>
       <input type="date" id="kpiWeek" aria-label="Lunes de la semana">
       <span class="kpi-hint">Se compara con la semana anterior</span>
@@ -2251,9 +2254,17 @@ function setupKpiControls(){
   if(!kpiWeek) kpiWeek = toISODate(mondayOf(today));
 
   modeEl.value = kpiMode;
-  if(dayWrap) dayWrap.hidden = kpiMode !== 'day';
-  if(weekWrap) weekWrap.hidden = kpiMode !== 'week';
-  if(monthWrap) monthWrap.hidden = kpiMode !== 'month';
+  function applyKpiModeUI(mode){
+    const show = (el, on) => {
+      if(!el) return;
+      el.hidden = !on;
+      el.style.display = on ? 'inline-flex' : 'none';
+    };
+    show(dayWrap, mode === 'day');
+    show(weekWrap, mode === 'week');
+    show(monthWrap, mode === 'month');
+  }
+  applyKpiModeUI(kpiMode);
 
   if(dayEl) dayEl.value = kpiDay;
   if(weekEl) weekEl.value = kpiWeek;
@@ -2277,9 +2288,7 @@ function setupKpiControls(){
     modeEl._wired = true;
     modeEl.addEventListener('change', () => {
       kpiMode = modeEl.value;
-      if(dayWrap) dayWrap.hidden = kpiMode !== 'day';
-      if(weekWrap) weekWrap.hidden = kpiMode !== 'week';
-      if(monthWrap) monthWrap.hidden = kpiMode !== 'month';
+      applyKpiModeUI(kpiMode);
       renderKpis(); updateContextBars();
     });
     if(dayEl) dayEl.addEventListener('change', () => { kpiDay = dayEl.value; renderKpis(); updateContextBars(); });
