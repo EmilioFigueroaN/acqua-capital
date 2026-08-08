@@ -601,12 +601,32 @@ select#execFilter:focus-visible{
   /* ---------- MORA / AGING ---------- */
   .mora-grid{
     display:grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap:12px;
     margin-bottom:16px;
   }
-  @media (max-width:900px){ .mora-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:1100px){ .mora-grid{ grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:700px){ .mora-grid{ grid-template-columns:repeat(2,1fr); } }
   @media (max-width:480px){ .mora-grid{ grid-template-columns:1fr; } }
+  .mora-tile.m015::before{ background:var(--gold); }
+  .mora-tile.m1530::before{ background:#c45c2a; }
+  .mora-fill.m015{ background:var(--gold); }
+  .mora-fill.m1530{ background:#c45c2a; }
+  .mora-pct-banner{
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px;
+    margin-bottom:14px; padding:12px 16px;
+    background:#fbf6ea; border:1px solid var(--gold-soft); border-radius:12px;
+  }
+  .mora-pct-banner .mp-label{
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.05em; color:#8f6a24;
+  }
+  .mora-pct-banner .mp-value{
+    font-family:'Fraunces',serif; font-size:22px; font-weight:600; color:var(--ink);
+  }
+  .mora-pct-banner .mp-meta{ font-size:12.5px; color:var(--ink-soft); }
+  .mora-actions{ display:flex; justify-content:flex-end; margin-top:12px; }
+
   .mora-tile{
     background:var(--paper);
     border:1px solid var(--line);
@@ -870,12 +890,13 @@ select#execFilter:focus-visible{
   <!-- SECTION 4: MORA / AGING -->
   <section class="block" id="secMora">
     <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Aging de mora</h2></div>
-    <p class="sec-desc">Clasificación del book de operaciones según días de mora del maestro. Días negativos = aún no vence (vigente). Positivos = días en mora.</p>
+    <p class="sec-desc">Clasificación del book según días de mora. Vigente = aún no vence. Tramos de mora: 0–15, 15–30, 31–60 y 60+ días. El % de mora es el peso del monto en mora sobre el book total.</p>
     <div class="ctx-bar" id="ctxMora">
       <span class="ctx-pill" id="ctxMoraPill">—</span>
-      <span class="ctx-text" id="ctxMoraText">Fuente: columna (19) Días de mora y montos del maestro. Respeta el filtro de ejecutivo / sesión.</span>
+      <span class="ctx-text" id="ctxMoraText">Fuente: (19) Días de mora y montos del maestro. Respeta filtro de ejecutivo / sesión.</span>
     </div>
     <div class="card">
+      <div class="mora-pct-banner" id="moraPctBanner"></div>
       <div class="mora-grid" id="moraTiles"></div>
       <div class="mora-table-wrap">
         <table id="tbl-mora">
@@ -890,6 +911,9 @@ select#execFilter:focus-visible{
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+      <div class="mora-actions">
+        <button type="button" id="btnDownloadMora" class="btn-refresh" title="Descargar aging de mora en CSV">⬇ Descargar mora (CSV)</button>
       </div>
     </div>
   </section>
@@ -2102,7 +2126,7 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Oportunidades:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
+      html: `<b>Inventario:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
         + (pDisp >= 60 ? 'Hay mucho stock sin ceder.' : 'La mayor parte del book ya tiene financiera.')
     });
   }
@@ -2147,11 +2171,14 @@ function renderMora(){
   const tiles = document.getElementById('moraTiles');
   const tbody = document.querySelector('#tbl-mora tbody');
   const pill = document.getElementById('ctxMoraPill');
+  const banner = document.getElementById('moraPctBanner');
   if(!tiles || !tbody) return;
 
   if(!masterRowsCache || !masterRowsCache.length){
     tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">Sin datos del maestro para aging.</p>';
     tbody.innerHTML = '';
+    if(banner) banner.innerHTML = '';
+    window._moraExportRows = null;
     return;
   }
 
@@ -2167,12 +2194,15 @@ function renderMora(){
   if(!colDias){
     tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">No se encontró la columna de días de mora en el maestro.</p>';
     tbody.innerHTML = '';
+    if(banner) banner.innerHTML = '';
+    window._moraExportRows = null;
     return;
   }
 
   const buckets = {
     vigente: { key:'vigente', label:'Vigente / por vencer', cls:'vigente', ops:0, monto:0, comps:{} },
-    m1:      { key:'m1', label:'Mora 1 – 30 días', cls:'m1', ops:0, monto:0, comps:{} },
+    m015:    { key:'m015', label:'Mora 0 – 15 días', cls:'m015', ops:0, monto:0, comps:{} },
+    m1530:   { key:'m1530', label:'Mora 15 – 30 días', cls:'m1530', ops:0, monto:0, comps:{} },
     m2:      { key:'m2', label:'Mora 31 – 60 días', cls:'m2', ops:0, monto:0, comps:{} },
     m3:      { key:'m3', label:'Mora 60+ días', cls:'m3', ops:0, monto:0, comps:{} }
   };
@@ -2190,7 +2220,8 @@ function renderMora(){
 
     let b;
     if(dias <= 0) b = buckets.vigente;
-    else if(dias <= 30) b = buckets.m1;
+    else if(dias <= 15) b = buckets.m015;
+    else if(dias <= 30) b = buckets.m1530;
     else if(dias <= 60) b = buckets.m2;
     else b = buckets.m3;
 
@@ -2200,13 +2231,27 @@ function renderMora(){
     b.comps[c] = (b.comps[c] || 0) + 1;
   });
 
-  const totalMonto = Object.values(buckets).reduce((s,b) => s + b.monto, 0);
-  const totalOps = Object.values(buckets).reduce((s,b) => s + b.ops, 0);
-  const order = ['vigente','m1','m2','m3'];
+  const order = ['vigente','m015','m1530','m2','m3'];
+  const totalMonto = order.reduce((s,k) => s + buckets[k].monto, 0);
+  const totalOps = order.reduce((s,k) => s + buckets[k].ops, 0);
+  const moraMonto = buckets.m015.monto + buckets.m1530.monto + buckets.m2.monto + buckets.m3.monto;
+  const moraOps = buckets.m015.ops + buckets.m1530.ops + buckets.m2.ops + buckets.m3.ops;
+  const pctMora = totalMonto > 0 ? (moraMonto / totalMonto * 100) : 0;
 
   if(pill){
     const fl = (typeof filterLabel === 'function') ? filterLabel() : (currentExec === 'ALL' ? 'Todos' : currentExec);
     pill.textContent = fl + ' · ' + totalOps + ' ops · ' + fmtCLP(totalMonto);
+  }
+
+  if(banner){
+    banner.innerHTML = `
+      <div>
+        <div class="mp-label">% mora sobre el book</div>
+        <div class="mp-value">${pctMora.toFixed(1).replace('.',',')}%</div>
+      </div>
+      <div class="mp-meta">Monto en mora: <b>${fmtCLP(moraMonto)}</b> · ${moraOps} ops<br>
+      Book total considerado: <b>${fmtCLP(totalMonto)}</b></div>
+    `;
   }
 
   tiles.innerHTML = order.map(k => {
@@ -2220,12 +2265,17 @@ function renderMora(){
     </div>`;
   }).join('');
 
+  const exportRows = [
+    ['Tramo', 'Operaciones', 'Monto (CLP)', '% del book', 'Comportamiento']
+  ];
+
   tbody.innerHTML = order.map(k => {
     const b = buckets[k];
     const pct = totalMonto > 0 ? (b.monto / totalMonto * 100) : 0;
     const compStr = Object.keys(b.comps).length
       ? Object.entries(b.comps).sort((a,c)=>c[1]-a[1]).map(([n,c]) => n + ' (' + c + ')').join(', ')
       : '—';
+    exportRows.push([b.label, b.ops, Math.round(b.monto), pct.toFixed(1).replace('.',',') + '%', compStr]);
     return `<tr>
       <td class="left">${b.label}</td>
       <td>${fmtInt(b.ops)}</td>
@@ -2238,45 +2288,23 @@ function renderMora(){
       <td>${fmtInt(totalOps)}</td>
       <td>${fmtCLP(totalMonto)}</td>
       <td>100%</td>
-      <td></td>
+      <td class="left" style="font-weight:400">Mora ${pctMora.toFixed(1).replace('.',',')}% del book</td>
     </tr>`;
 
-  // Insight de mora si hay exposición en mora
-  const moraMonto = buckets.m1.monto + buckets.m2.monto + buckets.m3.monto;
-  return { totalMonto, moraMonto, buckets };
+  exportRows.push(['Total', totalOps, Math.round(totalMonto), '100%', 'Mora ' + pctMora.toFixed(1).replace('.',',') + '% del book']);
+  exportRows.push(['Monto en mora', moraOps, Math.round(moraMonto), pctMora.toFixed(1).replace('.',',') + '%', '']);
+  window._moraExportRows = exportRows;
+
+  return { totalMonto, moraMonto, pctMora, buckets };
 }
 
-
-
-/** Unifica nombres de financieras para no duplicar por mayúsculas / variantes. */
-function normalizeFinanciera(name){
-  let s = String(name || '').trim();
-  if(!s || s === '-') return '';
-  s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // quita tildes
-  s = s.toUpperCase().replace(/\s+/g, ' ').trim();
-  s = s.replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
-  // Alias: variantes conocidas → nombre canónico (MAYÚSCULAS)
-  const rules = [
-    [/^BANCO\s+SANTANDER/, 'BANCO SANTANDER'],
-    [/^SANTANDER/, 'BANCO SANTANDER'],
-    [/^FACTORING\s+Y\s+SERVICIOS\s+DE\s+COBRANZA/, 'FACTORING Y SERVICIOS DE COBRANZA'],
-    [/^FACTORING\s+SECURITY/, 'FACTORING SECURITY S.A.'],
-    [/^CBP\s+FINANCIA/, 'CBP FINANCIA CAPITAL'],
-    [/^FINANCIA\s+CAPITAL/, 'FINANCIA CAPITAL'],
-    [/^BLANCO\s+FINANCIERO/, 'BLANCO FINANCIERO'],
-    [/^VISION\s+CAPITAL/, 'VISION CAPITAL'],
-    [/^BANCO\s+DE\s+CHILE/, 'BANCO DE CHILE'],
-    [/^BANCO\s+CONSORCIO/, 'BANCO CONSORCIO'],
-    [/^CORPBANCA/, 'CORPBANCA'],
-    [/^MOONK/, 'MOONK FACTORING'],
-    [/^PENTA\s+FINANCIERO/, 'PENTA FINANCIERO'],
-    [/^NUVIA\s+CAPITAL/, 'NUVIA CAPITAL'],
-    [/^PROGRESO/, 'PROGRESO S.A.'],
-  ];
-  for(const [re, canon] of rules){
-    if(re.test(s)) return canon;
+function downloadMoraCSV(){
+  if(!window._moraExportRows || !window._moraExportRows.length){
+    alert('No hay datos de mora para descargar. Actualiza desde CSV e intenta de nuevo.');
+    return;
   }
-  return s;
+  const filterSuffix = currentExec === 'ALL' ? 'todos' : currentExec.replace(/\s+/g, '_');
+  downloadCSV('aging_mora_' + filterSuffix + '.csv', window._moraExportRows);
 }
 
 function renderCesion(){
@@ -2486,6 +2514,9 @@ if(btnDownloadResumen) btnDownloadResumen.addEventListener('click', downloadResu
 
 const btnDownloadFacturas = document.getElementById('btnDownloadFacturas');
 if(btnDownloadFacturas) btnDownloadFacturas.addEventListener('click', downloadFacturasCSV);
+
+const btnDownloadMora = document.getElementById('btnDownloadMora');
+if(btnDownloadMora) btnDownloadMora.addEventListener('click', downloadMoraCSV);
 
 document.getElementById('btnLogin').addEventListener('click', attemptLogin);
 document.getElementById('btnLogout').addEventListener('click', logout);
