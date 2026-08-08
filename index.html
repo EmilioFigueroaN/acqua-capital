@@ -375,13 +375,19 @@ select#execFilter:focus-visible{
 
 
   /* ---------- INSIGHTS + CONCENTRATION ---------- */
-  .intel-grid{
-    display:grid;
-    grid-template-columns: 1.1fr 1fr;
-    gap:16px;
+  .intel-stack{
+    display:flex; flex-direction:column; gap:16px;
     margin-top:22px;
   }
+  .intel-grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:16px;
+  }
   @media (max-width:900px){ .intel-grid{ grid-template-columns:1fr; } }
+  .intel-card.insights-full{
+    width:100%;
+  }
 
   .intel-card{
     background:var(--white);
@@ -768,30 +774,6 @@ select#execFilter:focus-visible{
   .detail-scroll table{ min-width:900px; font-size:12px; }
 
 
-  .versus-wrap{
-    margin-top:16px; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-    gap:12px;
-  }
-  .versus-card{
-    background:var(--paper); border:1px solid var(--line); border-radius:12px;
-    padding:12px 14px;
-  }
-  .versus-card .v-label{
-    font-size:11px; font-weight:600; text-transform:uppercase;
-    letter-spacing:.04em; color:var(--ink-soft); margin-bottom:8px;
-  }
-  .versus-bars{ display:flex; flex-direction:column; gap:6px; }
-  .versus-row{ display:flex; align-items:center; gap:8px; font-size:12px; }
-  .versus-row .v-name{ width:72px; color:var(--ink-soft); flex-shrink:0; }
-  .versus-row .v-track{
-    flex:1; height:10px; background:var(--paper-2); border-radius:5px; overflow:hidden;
-  }
-  .versus-row .v-fill{ height:100%; border-radius:5px; background:var(--teal); }
-  .versus-row .v-fill.base{ background:#c5b89a; }
-  .versus-row .v-amt{
-    width:88px; text-align:right; font-family:'IBM Plex Mono',monospace;
-    font-size:11px; color:var(--ink);
-  }
   .sec-filters{
     display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center;
     margin:0 0 12px; padding:10px 14px;
@@ -923,26 +905,33 @@ select#execFilter:focus-visible{
   </div>
 
 
-  <!-- INTEL: concentración + insights -->
-  <div class="card" id="versusCard" style="margin-top:16px;">
-    <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Versus · actual vs base</h3>
-    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Barras comparativas del mes KPI contra la base elegida (mes anterior, mismo mes año ant., o promedio).</p>
-    <div class="versus-wrap" id="versusBars"></div>
-  </div>
-
-  <div class="intel-grid" id="intelGrid">
-    <div class="intel-card">
-      <h3>Radar de concentración</h3>
-      <p class="intel-sub">Participación de cada empresa sobre el book de facturas (disponibles + cedidas). Umbral de alerta: <b>25%</b>.</p>
-      <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
-        <span class="ctx-pill" id="ctxConcPill">—</span>
-        <span class="ctx-text" id="ctxConcText">Basado en el archivo de facturas nuevas, respeta el filtro de ejecutivo.</span>
+  <!-- INTEL: concentración clientes + deudores, luego insights -->
+  <div class="intel-stack" id="intelGrid">
+    <div class="intel-grid">
+      <div class="intel-card">
+        <h3>Concentración por cliente</h3>
+        <p class="intel-sub">Participación de cada empresa (cedente) sobre el book de facturas (disponibles + cedidas). Umbral de alerta: <b>25%</b>.</p>
+        <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
+          <span class="ctx-pill" id="ctxConcPill">—</span>
+          <span class="ctx-text" id="ctxConcText">Basado en reporteFacturasNuevas · respeta filtro de ejecutivo.</span>
+        </div>
+        <div class="conc-meters" id="concMeters"></div>
+        <div class="conc-summary" id="concSummary"></div>
+        <p class="conc-threshold">Top clientes por exposición. Rojo ≥ 25% · Amarillo ≥ 15% · Verde &lt; 15%.</p>
       </div>
-      <div class="conc-meters" id="concMeters"></div>
-      <div class="conc-summary" id="concSummary"></div>
-      <p class="conc-threshold">Top clientes por exposición. Rojo ≥ 25% · Amarillo ≥ 15% · Verde &lt; 15%.</p>
+      <div class="intel-card">
+        <h3>Concentración por deudor</h3>
+        <p class="intel-sub">Peso de cada deudor sobre el book de facturas (oportunidades). Respeta filtro de ejecutivo y antigüedad.</p>
+        <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
+          <span class="ctx-pill" id="ctxDeudorPill">—</span>
+          <span class="ctx-text" id="ctxDeudorText">Misma fuente de facturas nuevas · mismos filtros de sección.</span>
+        </div>
+        <div class="conc-meters" id="deudorMeters"></div>
+        <div class="conc-summary" id="deudorSummary"></div>
+        <p class="conc-threshold">Top deudores por exposición. Rojo ≥ 25% · Amarillo ≥ 15% · Verde &lt; 15%.</p>
+      </div>
     </div>
-    <div class="intel-card">
+    <div class="intel-card insights-full">
       <h3>Insights automáticos</h3>
       <p class="intel-sub">Lecturas generadas con las reglas del negocio a partir de los CSV cargados.</p>
       <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
@@ -1038,18 +1027,10 @@ select#execFilter:focus-visible{
     </div>
     <div class="notes" id="notesFacturas"></div>
 
-    <div class="dual-conc" style="margin-top:18px;">
-      <div class="card">
-        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Concentración por deudor</h3>
-        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Peso de cada deudor sobre el book de facturas (oportunidades). Respeta filtro de ejecutivo.</p>
-        <div class="conc-meters" id="deudorMeters"></div>
-        <div class="conc-summary" id="deudorSummary"></div>
-      </div>
-      <div class="card">
-        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Segmentación Warren × cesión</h3>
-        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Warren alto ≥ 400 · medio 200–399 · bajo &lt; 200 o sin dato. Cruce con disponible / cedida.</p>
-        <div class="seg-matrix" id="warrenSegMatrix"></div>
-      </div>
+    <div class="card" style="margin-top:18px;">
+      <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Segmentación Warren × cesión</h3>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Warren alto ≥ 400 · medio 200–399 · bajo &lt; 200 o sin dato. Cruce con disponible / cedida. Respeta filtros de la sección.</p>
+      <div class="seg-matrix" id="warrenSegMatrix"></div>
     </div>
 
     <div class="card" style="margin-top:18px;">
@@ -1081,38 +1062,27 @@ select#execFilter:focus-visible{
 
   
   
-  <!-- COMISIONES + CARTERA -->
+  <!-- COMISIONES -->
   <section class="block" id="secComisiones">
-    <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Comisiones y concentración de cartera</h2></div>
-    <p class="sec-desc">Comisiones del maestro (Comisión RC y gastos asociados). Concentración de la cartera operativa por cliente (cedente) y por deudor, con el filtro de ejecutivo.</p>
+    <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Comisiones</h2></div>
+    <p class="sec-desc">Comisiones del maestro (Comisión RC y gastos asociados). Respeta el filtro de ejecutivo.</p>
     <div class="ctx-bar" id="ctxComisiones">
       <span class="ctx-pill" id="ctxComisionesPill">—</span>
-      <span class="ctx-text">Fuente: (35) Comisión RC, (34)/(60) gasto legal, (36) gasto operación. Cliente = Empresa solicitante · Deudor = Empresa deudora.</span>
+      <span class="ctx-text">Fuente: (35) Comisión RC, (34)/(60) gasto legal, (36) gasto operación.</span>
     </div>
-    <div class="funnel-row">
-      <div class="card">
-        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Comisiones</h3>
-        <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
-        <div class="mora-table-wrap" style="margin-top:12px;">
-          <table id="tbl-comisiones">
-            <thead>
-              <tr>
-                <th class="left">Concepto</th>
-                <th>Operaciones</th>
-                <th>Monto (CLP)</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card">
-        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 8px;color:var(--ink);">Cartera · por cliente (cedente)</h3>
-        <div class="conc-meters" id="carteraClienteMeters"></div>
-        <div class="conc-summary" id="carteraClienteSummary" style="margin-top:10px;"></div>
-        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:18px 0 8px;color:var(--ink);">Cartera · por deudor</h3>
-        <div class="conc-meters" id="carteraDeudorMeters"></div>
-        <div class="conc-summary" id="carteraDeudorSummary" style="margin-top:10px;"></div>
+    <div class="card">
+      <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
+      <div class="mora-table-wrap" style="margin-top:12px;">
+        <table id="tbl-comisiones">
+          <thead>
+            <tr>
+              <th class="left">Concepto</th>
+              <th>Operaciones</th>
+              <th>Monto (CLP)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -2482,6 +2452,7 @@ function renderInsights(conc){
 
 function renderIntel(){
   const conc = renderConcentration();
+  renderDeudorConcentration();
   renderInsights(conc || { items:[], book:0 });
 }
 
@@ -2798,6 +2769,9 @@ function renderDeudorConcentration(){
   const items = Object.keys(byD).map(n => ({ nombre: n, total: byD[n] })).filter(x => x.total > 0);
   items.sort((a,b) => b.total - a.total);
   const book = items.reduce((s,x) => s + x.total, 0);
+
+  const deudorPill = document.getElementById('ctxDeudorPill');
+  if(deudorPill) deudorPill.textContent = (currentExec === 'ALL' ? 'Todo el book' : currentExec) + ' · ' + fmtCLP(book);
 
   if(!items.length || book <= 0){
     meters.innerHTML = '<p class="insight-empty">Sin montos por deudor.</p>';
@@ -3165,93 +3139,12 @@ function renderCarteraSide(kind){
 }
 
 
-function renderVersus(){
-  const el = document.getElementById('versusBars');
-  if(!el || !DATA) return;
-  const ym = document.getElementById('kpiMonth')?.value || DATA.generated_current_month;
-  const baseMode = document.getElementById('kpiBase')?.value || 'prev';
-  const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
-
-  function metricsFor(month){
-    const m = { ops:0, monto:0, dif:0, nuevos:0 };
-    execs.forEach(e => {
-      const ed = DATA.summary.ejecutivos[e];
-      if(!ed) return;
-      const c = ed.months[month] || emptyMetrics();
-      m.ops += c.operaciones;
-      m.monto += c.monto_fin;
-      m.dif += c.dif_precio;
-      m.nuevos += c.clientes_nuevos;
-    });
-    return m;
-  }
-
-  function baseMonth(ym, mode){
-    const [y, mo] = ym.split('-').map(Number);
-    if(mode === 'prev'){
-      let pm = mo - 1, py = y;
-      if(pm < 1){ pm = 12; py--; }
-      return py + '-' + String(pm).padStart(2,'0');
-    }
-    if(mode === 'yoy') return (y-1) + '-' + String(mo).padStart(2,'0');
-    return null; // avg handled separately
-  }
-
-  const cur = metricsFor(ym);
-  let base = { ops:0, monto:0, dif:0, nuevos:0 };
-  let baseLabel = 'Base';
-  if(baseMode === 'prev' || baseMode === 'yoy'){
-    const bm = baseMonth(ym, baseMode);
-    base = metricsFor(bm);
-    baseLabel = baseMode === 'prev' ? 'Mes ant.' : 'Año ant.';
-  } else {
-    // average
-    const months = DATA.months || [];
-    let n = 0;
-    months.forEach(m => {
-      const x = metricsFor(m);
-      if(x.ops > 0 || x.monto > 0){
-        base.ops += x.ops; base.monto += x.monto; base.dif += x.dif; base.nuevos += x.nuevos; n++;
-      }
-    });
-    if(n > 0){ base.ops /= n; base.monto /= n; base.dif /= n; base.nuevos /= n; }
-    baseLabel = 'Promedio';
-  }
-
-  const items = [
-    { key:'ops', label:'Operaciones', cur: cur.ops, base: base.ops, money:false },
-    { key:'monto', label:'Monto anticipo', cur: cur.monto, base: base.monto, money:true },
-    { key:'dif', label:'Dif. de precio', cur: cur.dif, base: base.dif, money:true },
-    { key:'nuevos', label:'Clientes nuevos', cur: cur.nuevos, base: base.nuevos, money:false },
-  ];
-
-  el.innerHTML = items.map(it => {
-    const max = Math.max(it.cur, it.base, 1);
-    const pctC = Math.min(100, (it.cur / max) * 100);
-    const pctB = Math.min(100, (it.base / max) * 100);
-    const fmt = v => it.money ? fmtCLP(v) : fmtInt(Math.round(v));
-    return `<div class="versus-card">
-      <div class="v-label">${it.label}</div>
-      <div class="versus-bars">
-        <div class="versus-row"><span class="v-name">Actual</span>
-          <div class="v-track"><div class="v-fill" style="width:${pctC}%"></div></div>
-          <span class="v-amt">${fmt(it.cur)}</span></div>
-        <div class="versus-row"><span class="v-name">${baseLabel}</span>
-          <div class="v-track"><div class="v-fill base" style="width:${pctB}%"></div></div>
-          <span class="v-amt">${fmt(it.base)}</span></div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
 function renderAll(){
   if(!DATA) return;
   renderKpis();
-  renderVersus();
   updateContextBars();
   renderIntel();
   renderComisiones();
-  renderCarteraConcentration();
   renderMora();
   renderCesion();
   renderResumen();
