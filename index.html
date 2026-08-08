@@ -841,6 +841,24 @@ select#execFilter:focus-visible{
     font-size:11px; color:var(--ink-soft); margin-left:2px;
   }
 
+  .urg-dot{
+    display:inline-block; width:9px; height:9px; border-radius:50%;
+    margin-right:8px; vertical-align:middle; flex-shrink:0;
+    box-shadow:0 0 0 1px rgba(18,24,38,0.08);
+  }
+  .urg-dot.crit{ background:#c0392b; box-shadow:0 0 0 3px rgba(192,57,43,0.18); }
+  .urg-dot.warn{ background:#d4a017; }
+  .urg-dot.ok{ background:#2a5c55; opacity:0.55; }
+  .urg-dot.na{ background:#c5bfb0; opacity:0.5; }
+  .urg-legend{
+    display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center;
+    font-size:12px; color:var(--ink-soft); margin:0 0 12px;
+  }
+  .urg-legend span{ display:inline-flex; align-items:center; gap:6px; }
+  td.left .name-with-dot{
+    display:inline-flex; align-items:center; max-width:100%;
+  }
+
 </style>
 </head>
 <body>
@@ -1051,6 +1069,14 @@ select#execFilter:focus-visible{
         <span class="age-val" id="factAgeMaxVal">15</span>
         <span class="age-unlimited" id="factAgeUnlimited" hidden>sin límite</span>
       </div>
+      <label for="factUrgFilter">Urgencia</label>
+      <select id="factUrgFilter" aria-label="Filtrar por color de urgencia">
+        <option value="ALL">Todas</option>
+        <option value="crit">🔴 Críticas (≥ 25 días)</option>
+        <option value="warn">🟡 Atención (15–24 días)</option>
+        <option value="ok">🟢 Al día (&lt; 15 días)</option>
+        <option value="na">⚪ Sin fecha</option>
+      </select>
     </div>
     <div class="ctx-bar" id="ctxFacturas">
       <span class="ctx-pill" id="ctxFacturasPill">—</span>
@@ -1074,7 +1100,13 @@ select#execFilter:focus-visible{
 
     <div class="card" style="margin-top:18px;">
       <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Detalle de facturas (oportunidades)</h3>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px;">Detalle factura por factura: empresa, deudor, monto, puntaje Warren y si está disponible o ya cedida. Respeta los filtros de esta sección.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Cada fila es una factura. El punto de color junto al nombre indica urgencia según la antigüedad (días desde la fecha de la factura). Las más críticas —cerca de vencer o ya muy antiguas— se marcan en rojo, sobre todo si aún están disponibles para ceder.</p>
+      <div class="urg-legend" id="factUrgLegend">
+        <span><i class="urg-dot crit"></i> Crítica (≥ 25 días, priorizar)</span>
+        <span><i class="urg-dot warn"></i> Atención (15–24 días)</span>
+        <span><i class="urg-dot ok"></i> Al día (&lt; 15 días)</span>
+        <span><i class="urg-dot na"></i> Sin fecha</span>
+      </div>
       <div class="detail-scroll">
         <table id="tbl-facturas-detalle">
           <thead>
@@ -1953,7 +1985,7 @@ function downloadMesCursoChartsCSV(){
 
 function renderFacturas(){
   const filters = getFactSectionFilters();
-  const hasSectionFilter = filters.estado !== 'ALL' || filters.warren !== 'ALL' || !!filters.search || (filters.ageMax > 0);
+  const hasSectionFilter = filters.estado !== 'ALL' || filters.warren !== 'ALL' || !!filters.search || (filters.ageMax > 0) || (filters.urgencia && filters.urgencia !== 'ALL');
 
   let rows;
 
@@ -1974,6 +2006,11 @@ function renderFacturas(){
       const e = r[fExec] || '';
       if(currentExec !== 'ALL' && e !== currentExec) return;
       if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha)) return;
+      if(filters.urgencia && filters.urgencia !== 'ALL'){
+        const fin0 = (r[fFin] || '').trim();
+        const est0 = (fin0 && fin0 !== '-') ? 'Cedida' : 'Disponible';
+        if(facturaUrgencia(r[fFecha], est0).cls !== filters.urgencia) return;
+      }
 
       const emp = (r[fEmp] || 'Sin empresa').trim() || 'Sin empresa';
       const fin = (r[fFin] || '').trim();
@@ -2057,6 +2094,10 @@ function renderFacturas(){
       if(filters.warren !== 'ALL') parts.push('Warren ' + filters.warren);
       if(filters.search) parts.push('búsqueda "' + filters.search + '"');
       if(filters.ageMax > 0) parts.push('antigüedad ≤ ' + filters.ageMax + ' días');
+      if(filters.urgencia && filters.urgencia !== 'ALL'){
+        const urgNames = { crit:'críticas', warn:'atención', ok:'al día', na:'sin fecha' };
+        parts.push('urgencia: ' + (urgNames[filters.urgencia] || filters.urgencia));
+      }
       extra = ' Filtros activos: ' + parts.join(', ') + '.';
     }
     notes.innerHTML = `<ul>
@@ -3084,7 +3125,8 @@ function getFactSectionFilters(){
     estado: document.getElementById('factEstadoFilter')?.value || 'ALL',
     warren: document.getElementById('factWarrenFilter')?.value || 'ALL',
     search: (document.getElementById('factSearch')?.value || '').trim().toLowerCase(),
-    ageMax: ageMax // 0 = sin límite
+    ageMax: ageMax, // 0 = sin límite
+    urgencia: document.getElementById('factUrgFilter')?.value || 'ALL'
   };
 }
 
@@ -3119,6 +3161,21 @@ function passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha){
   return true;
 }
 
+function facturaUrgencia(fechaStr, estado){
+  // Clasifica por antigüedad de la factura (días desde su fecha hasta hoy).
+  // Crítica si tiene 25+ días (por vencer / oportunidad vieja), sobre todo si sigue disponible.
+  const d = parseFullDate(fechaStr);
+  if(!d) return { cls:'na', label:'Sin fecha', days:null };
+  const today = new Date();
+  const a = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const b = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.floor((a - b) / 86400000);
+  if(days < 0) return { cls:'ok', label:'Fecha futura', days };
+  if(days >= 25) return { cls:'crit', label: days + ' días · crítica', days };
+  if(days >= 15) return { cls:'warn', label: days + ' días · atención', days };
+  return { cls:'ok', label: days + ' días', days };
+}
+
 function renderFacturasDetalle(){
   const tbody = document.querySelector('#tbl-facturas-detalle tbody');
   if(!tbody) return;
@@ -3145,8 +3202,30 @@ function renderFacturasDetalle(){
     return passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha);
   });
 
-  // limit display for performance but export all filtered
-  const exportRows = [['Empresa','Deudor','Ejecutivo','Folio','Fecha','Monto','Warren','Financiera','Estado']];
+  // Filtro por color de urgencia
+  if(filters.urgencia && filters.urgencia !== 'ALL'){
+    rows = rows.filter(r => {
+      const fin = (r[fFin] || '').trim();
+      const estado = (fin && fin !== '-') ? 'Cedida' : 'Disponible';
+      return facturaUrgencia(r[fFecha], estado).cls === filters.urgencia;
+    });
+  }
+
+  // Orden: críticas primero, luego atención, luego el resto
+  rows = rows.slice().sort((a,b) => {
+    const fa = (a[fFin]||'').trim(); const fb = (b[fFin]||'').trim();
+    const ea = (fa && fa !== '-') ? 'Cedida' : 'Disponible';
+    const eb = (fb && fb !== '-') ? 'Cedida' : 'Disponible';
+    const ua = facturaUrgencia(a[fFecha], ea);
+    const ub = facturaUrgencia(b[fFecha], eb);
+    const rank = { crit:0, warn:1, ok:2, na:3 };
+    const ra = rank[ua.cls] + (ea === 'Disponible' ? 0 : 0.5);
+    const rb = rank[ub.cls] + (eb === 'Disponible' ? 0 : 0.5);
+    if(ra !== rb) return ra - rb;
+    return (ub.days||0) - (ua.days||0);
+  });
+
+  const exportRows = [['Urgencia','Dias','Empresa','Deudor','Ejecutivo','Folio','Fecha','Monto','Warren','Financiera','Estado']];
   const maxShow = 300;
   let body = '';
   rows.forEach((r, i) => {
@@ -3154,13 +3233,16 @@ function renderFacturasDetalle(){
     const estado = (fin && fin !== '-') ? 'Cedida' : 'Disponible';
     const monto = toNum(r[fMonto]);
     const war = r[fWar];
+    const urg = facturaUrgencia(r[fFecha], estado);
     exportRows.push([
+      urg.label, urg.days == null ? '' : urg.days,
       r[fEmp]||'', r[fDeudor]||'', r[fExec]||'', r[fFolio]||'', r[fFecha]||'',
       Math.round(monto), war != null ? String(war) : '', fin || '-', estado
     ]);
     if(i < maxShow){
+      const emp = escapeHtml(r[fEmp]||'');
       body += `<tr>
-        <td class="left">${escapeHtml(r[fEmp]||'')}</td>
+        <td class="left"><span class="name-with-dot" title="${escapeHtml(urg.label)}"><i class="urg-dot ${urg.cls}"></i>${emp}</span></td>
         <td class="left" style="font-weight:400">${escapeHtml(r[fDeudor]||'')}</td>
         <td class="left" style="font-weight:400;color:var(--ink-soft)">${escapeHtml(r[fExec]||'')}</td>
         <td>${escapeHtml(String(r[fFolio]||''))}</td>
@@ -3491,7 +3573,7 @@ if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', down
 function refreshFacturasSection(){
   if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); renderCesion(); }
 }
-['factEstadoFilter','factWarrenFilter'].forEach(id => {
+['factEstadoFilter','factWarrenFilter','factUrgFilter'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', refreshFacturasSection);
 });
