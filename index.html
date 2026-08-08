@@ -851,7 +851,7 @@ select#execFilter:focus-visible{
       <img src="acqua.png" alt="Acqua Capital" onerror="this.style.display='none'">
     </div>
     <h1 id="loginTitle">Dashboard Factoring</h1>
-    <p class="login-sub">Ingresa con tu nombre y RUT para ver la información según tu perfil.</p>
+    <p class="login-sub">Escribe tu nombre y RUT para entrar. Según tu perfil verás solo tu cartera o toda la información de la empresa.</p>
     <div class="login-error" id="loginError" role="alert"></div>
     <div class="login-field">
       <label for="loginNombre">Nombre</label>
@@ -862,7 +862,7 @@ select#execFilter:focus-visible{
       <input type="text" id="loginRut" autocomplete="username" placeholder="12.345.678-9" inputmode="text">
     </div>
     <button type="button" class="login-btn" id="btnLogin">Ingresar</button>
-    <p class="login-hint">Ejecutivos: solo su cartera · Gerencia: visión completa · Usuarios en users.csv</p>
+    <p class="login-hint">Si eres ejecutivo verás solo tus operaciones. Si eres gerencia, verás el panorama completo.</p>
   </div>
 </div>
 
@@ -883,7 +883,7 @@ select#execFilter:focus-visible{
       </div>
     <p class="eyebrow">Operaciones · Factoring</p>
     <h1 class="title">Dashboard de Factoring</h1>
-    <p class="hero-sub">Resumen general, desempeño del mes en curso y estado de facturas nuevas, construido a partir de <span style="color:#fff">reporte_factoring_master</span> y <span style="color:#fff">reporteFacturasNuevas</span>.</p>
+    <p class="hero-sub">Aquí puedes ver cómo van las operaciones de factoring: cuánto se ha adelantado, a quiénes, qué está en mora y qué facturas hay disponibles para ceder.</p>
     <div class="hero-meta" id="heroMeta"></div>
   </div>
 </div>
@@ -900,7 +900,7 @@ select#execFilter:focus-visible{
       <button type="button" id="btnNextYear" title="Año siguiente" aria-label="Año siguiente">›</button>
     </div>
     <span class="filter-tag" id="filterTag" aria-live="polite">Mostrando todos los ejecutivos</span>
-    <button type="button" id="btnRefresh" class="btn-refresh" title="Volver a leer los CSV" aria-label="Actualizar datos desde los archivos CSV">↻ Actualizar desde CSV</button>
+    <button type="button" id="btnRefresh" class="btn-refresh" title="Actualizar los datos leyendo de nuevo los archivos CSV" aria-label="Actualizar datos desde los archivos CSV">↻ Actualizar desde CSV</button>
     <span class="load-status" id="loadStatus" role="status" aria-live="polite"></span>
   </div>
 
@@ -916,13 +916,13 @@ select#execFilter:focus-visible{
     <span id="kpiDayWrap" class="kpi-mode-block" hidden style="display:none">
       <label for="kpiDay">Día</label>
       <input type="date" id="kpiDay" aria-label="Día a analizar">
-      <span class="kpi-hint">Se compara con el día anterior</span>
+      <span class="kpi-hint">Se compara automáticamente con el día anterior</span>
     </span>
 
     <span id="kpiWeekWrap" class="kpi-mode-block" hidden style="display:none">
       <label for="kpiWeek">Semana (lunes)</label>
       <input type="date" id="kpiWeek" aria-label="Lunes de la semana">
-      <span class="kpi-hint">Se compara con la semana anterior</span>
+      <span class="kpi-hint">Se compara automáticamente con la semana anterior</span>
     </span>
 
     <span id="kpiMonthWrap" class="kpi-mode-block">
@@ -949,33 +949,33 @@ select#execFilter:focus-visible{
     <div class="intel-grid">
       <div class="intel-card">
         <h3>Concentración por cliente</h3>
-        <p class="intel-sub">Participación de cada empresa (cedente) sobre el book de facturas (disponibles + cedidas). Umbral de alerta: <b>25%</b>.</p>
+        <p class="intel-sub">Muestra qué parte del dinero adelantado concentra cada cliente (la empresa a la que le compramos la factura). Si un solo cliente supera el <b>25%</b>, hay más riesgo de dependencia.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxConcPill">—</span>
-          <span class="ctx-text" id="ctxConcText">Basado en reporteFacturasNuevas · respeta filtro de ejecutivo.</span>
+          <span class="ctx-text" id="ctxConcText">Se calcula con las operaciones reales del maestro. Respeta el filtro de ejecutivo elegido arriba.</span>
         </div>
         <div class="conc-meters" id="concMeters"></div>
         <div class="conc-summary" id="concSummary"></div>
-        <p class="conc-threshold">Top clientes por exposición. Rojo ≥ 25% · Amarillo ≥ 15% · Verde &lt; 15%.</p>
+        <p class="conc-threshold">Colores de alerta: rojo si un cliente concentra 25% o más · amarillo desde 15% · verde bajo 15%.</p>
       </div>
       <div class="intel-card">
         <h3>Concentración por deudor</h3>
-        <p class="intel-sub">Peso de cada deudor sobre el book de facturas (oportunidades). Respeta filtro de ejecutivo y antigüedad.</p>
+        <p class="intel-sub">Muestra a quién le deben las facturas que financiamos (el deudor es quien debe pagar). Sirve para ver si dependemos demasiado de un solo pagador.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxDeudorPill">—</span>
-          <span class="ctx-text" id="ctxDeudorText">Misma fuente de facturas nuevas · mismos filtros de sección.</span>
+          <span class="ctx-text" id="ctxDeudorText">Se calcula con las operaciones reales del maestro. Respeta el filtro de ejecutivo elegido arriba.</span>
         </div>
         <div class="conc-meters" id="deudorMeters"></div>
         <div class="conc-summary" id="deudorSummary"></div>
-        <p class="conc-threshold">Top deudores por exposición. Rojo ≥ 25% · Amarillo ≥ 15% · Verde &lt; 15%.</p>
+        <p class="conc-threshold">Colores de alerta: rojo si un deudor concentra 25% o más · amarillo desde 15% · verde bajo 15%.</p>
       </div>
     </div>
     <div class="intel-card insights-full">
       <h3>Insights automáticos</h3>
-      <p class="intel-sub">Lecturas generadas con las reglas del negocio a partir de los CSV cargados.</p>
+      <p class="intel-sub">Resúmenes automáticos que destacan riesgos, oportunidades o datos incompletos según las reglas del negocio.</p>
       <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
         <span class="ctx-pill" id="ctxInsightPill">—</span>
-        <span class="ctx-text" id="ctxInsightText">Se actualizan al cambiar filtros, mes KPI o datos.</span>
+        <span class="ctx-text" id="ctxInsightText">Se actualizan solos cuando cambias el ejecutivo, el periodo de análisis o los datos.</span>
       </div>
       <ul class="insight-list" id="insightList"></ul>
     </div>
@@ -984,12 +984,12 @@ select#execFilter:focus-visible{
   <!-- SECTION 1 -->
   <section class="block" id="secResumen" hidden>
     <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Resumen General</h2></div>
-    <p class="sec-desc">Los 12 meses del año seleccionado, agrupados por ejecutivo. Usa las flechas de Año para retroceder o avanzar. Clientes nuevos según <code>(24)Cliente nuevo</code>; operaciones, monto de anticipo y diferencia de precio según <code>(47)Fecha creacion</code>.</p>
+    <p class="sec-desc">Tabla del año elegido, mes a mes y por ejecutivo: cuántas operaciones hubo, cuánto dinero se adelantó, cuánta diferencia de precio se generó y cuántos clientes nuevos entraron. Cambia el año con las flechas de arriba.</p>
     <div class="card">
       <table id="tbl-resumen"></table>
     </div>
     <div class="chart-download-row">
-      <button type="button" id="btnDownloadResumen" class="btn-refresh" title="Descargar CSV detallado operación a operación (todas las columnas del maestro)">⬇ Descargar detalle operaciones (CSV)</button>
+      <button type="button" id="btnDownloadResumen" class="btn-refresh" title="Descargar el detalle de cada operación del maestro en CSV">⬇ Descargar detalle operaciones (CSV)</button>
     </div>
     <div class="notes" id="notesGeneral"></div>
   </section>
@@ -997,7 +997,7 @@ select#execFilter:focus-visible{
   <!-- SECTION 2 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Mes en curso</h2></div>
-    <p class="sec-desc" id="mesCursoDesc">Detalle del mes calendario actual: ranking de ejecutivos por monto anticipado y diferencia de precio.</p>
+    <p class="sec-desc" id="mesCursoDesc">Ranking del mes actual: qué ejecutivo adelantó más dinero y quién generó más diferencia de precio (el ingreso del factoring).</p>
     <div class="ctx-bar" id="ctxMesCurso">
       <span class="ctx-pill" id="ctxMesCursoPill">—</span>
       <span class="ctx-text" id="ctxMesCursoText">Solo operaciones cuya fecha de creación cae en este mes. Los gráficos debajo usan los mismos números.</span>
@@ -1010,30 +1010,30 @@ select#execFilter:focus-visible{
     <div class="chart-grid">
       <div class="card chart-card">
         <h3>Monto de anticipo / financiamiento por ejecutivo</h3>
-        <p class="chart-sub">Mayor a menor · mismo mes que la tabla de arriba</p>
+        <p class="chart-sub">Ordenados de mayor a menor, usando el mismo mes de la tabla de arriba.</p>
         <div id="chart-monto"></div>
       </div>
       <div class="card chart-card">
         <h3>Diferencia de precio por ejecutivo</h3>
-        <p class="chart-sub">Mayor a menor · mismo mes que la tabla de arriba</p>
+        <p class="chart-sub">Ordenados de mayor a menor, usando el mismo mes de la tabla de arriba.</p>
         <div id="chart-dif"></div>
       </div>
     </div>
     <div class="chart-download-row">
-      <button type="button" id="btnDownloadCharts" class="btn-refresh" title="Descargar en CSV los datos que alimentan los gráficos de arriba">⬇ Descargar datos de gráficos (CSV)</button>
+      <button type="button" id="btnDownloadCharts" class="btn-refresh" title="Descargar los datos de estos gráficos en CSV">⬇ Descargar datos de gráficos (CSV)</button>
     </div>
   </section>
 
   <!-- SECTION 3 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Facturas nuevas</h2></div>
-    <p class="sec-desc">Consolidado por Razón social empresa desde reporteFacturasNuevas, filtrable por ejecutivo (filtro global) y por antigüedad de la factura. Disponibles = Monto total sin financiera asignada; cedidas = Monto total con financiera asignada. Ordenado de mayor a menor según Warren 2.</p>
+    <p class="sec-desc">Listado de facturas agrupadas por empresa. “Disponibles” son las que aún no tienen financiera (se pueden ceder). “Cedidas” ya tienen un banco o fondo asignado. Puedes filtrar por estado, puntaje Warren, buscar por nombre y limitar por antigüedad de la factura (días desde su fecha).</p>
     <div class="sec-filters" id="factFilters">
       <label for="factEstadoFilter">Estado</label>
       <select id="factEstadoFilter">
         <option value="ALL">Todos</option>
-        <option value="disp">Solo disponibles</option>
-        <option value="ced">Solo cedidas</option>
+        <option value="disp">Solo disponibles (sin financiera)</option>
+        <option value="ced">Solo cedidas (con financiera)</option>
       </select>
       <label for="factWarrenFilter">Warren</label>
       <select id="factWarrenFilter">
@@ -1044,9 +1044,9 @@ select#execFilter:focus-visible{
         <option value="sin">Sin dato</option>
       </select>
       <label for="factSearch">Buscar</label>
-      <input type="search" id="factSearch" placeholder="Empresa o deudor…" style="font-family:inherit;font-size:13px;padding:6px 10px;border:1.5px solid var(--line);border-radius:8px;min-width:180px;">
-      <div class="age-filter-wrap" title="Solo facturas con fecha dentro de los últimos N días. 0 = sin límite.">
-        <label for="factAgeMax">Antigüedad máxima (días)</label>
+      <input type="search" id="factSearch" placeholder="Buscar empresa o deudor…" style="font-family:inherit;font-size:13px;padding:6px 10px;border:1.5px solid var(--line);border-radius:8px;min-width:180px;">
+      <div class="age-filter-wrap" title="Muestra solo facturas emitidas en los últimos N días. Pon 0 para ver todas, sin límite de antigüedad.">
+        <label for="factAgeMax">Solo facturas de hasta (días)</label>
         <input type="range" id="factAgeMax" min="0" max="90" value="15" step="1" aria-valuemin="0" aria-valuemax="90" aria-valuenow="15">
         <span class="age-val" id="factAgeMaxVal">15</span>
         <span class="age-unlimited" id="factAgeUnlimited" hidden>sin límite</span>
@@ -1054,7 +1054,7 @@ select#execFilter:focus-visible{
     </div>
     <div class="ctx-bar" id="ctxFacturas">
       <span class="ctx-pill" id="ctxFacturasPill">—</span>
-      <span class="ctx-text" id="ctxFacturasText"><b>Disponibles</b> = sin financiera (o “-”). <b>Cedidas</b> = con banco/fondo asignado. <b>Warren</b> = promedio del score; “Sin registro” no entra al cálculo.</span>
+      <span class="ctx-text" id="ctxFacturasText">Disponibles = aún sin financiera. Cedidas = ya asignadas a un banco o fondo. Warren = puntaje de calidad (promedio; si dice “Sin registro” no se incluye en el cálculo).</span>
     </div>
     <div class="card">
       <div class="table-scroll">
@@ -1062,19 +1062,19 @@ select#execFilter:focus-visible{
       </div>
     </div>
     <div class="chart-download-row">
-      <button type="button" id="btnDownloadFacturas" class="btn-refresh" title="Descargar en CSV la tabla de Facturas nuevas">⬇ Descargar Facturas nuevas (CSV)</button>
+      <button type="button" id="btnDownloadFacturas" class="btn-refresh" title="Descargar esta tabla de facturas en un archivo Excel/CSV">⬇ Descargar Facturas nuevas (CSV)</button>
     </div>
     <div class="notes" id="notesFacturas"></div>
 
     <div class="card" style="margin-top:18px;">
       <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Segmentación Warren × cesión</h3>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Warren alto ≥ 400 · medio 200–399 · bajo &lt; 200 o sin dato. Cruce con disponible / cedida. Respeta filtros de la sección.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Cruza el puntaje Warren de cada factura con su estado (disponible o ya cedida). Alto = 400 o más · Medio = 200 a 399 · Bajo = menos de 200 o sin dato. Así ves dónde está el riesgo y qué queda por ceder.</p>
       <div class="seg-matrix" id="warrenSegMatrix"></div>
     </div>
 
     <div class="card" style="margin-top:18px;">
       <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Detalle de facturas (oportunidades)</h3>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px;">Una fila por factura del CSV. Filtro de ejecutivo aplicado.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px;">Detalle factura por factura: empresa, deudor, monto, puntaje Warren y si está disponible o ya cedida. Respeta los filtros de esta sección.</p>
       <div class="detail-scroll">
         <table id="tbl-facturas-detalle">
           <thead>
@@ -1094,7 +1094,7 @@ select#execFilter:focus-visible{
         </table>
       </div>
       <div class="chart-download-row">
-        <button type="button" id="btnDownloadDetalleFact" class="btn-refresh" title="Descargar detalle de facturas">⬇ Descargar detalle facturas (CSV)</button>
+        <button type="button" id="btnDownloadDetalleFact" class="btn-refresh" title="Descargar el detalle de cada factura en CSV">⬇ Descargar detalle facturas (CSV)</button>
       </div>
     </div>
   </section>
@@ -1104,10 +1104,10 @@ select#execFilter:focus-visible{
   <!-- COMISIONES -->
   <section class="block" id="secComisiones">
     <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Comisiones</h2></div>
-    <p class="sec-desc">Comisiones del maestro (Comisión RC y gastos asociados). Respeta el filtro de ejecutivo.</p>
+    <p class="sec-desc">Suma de las comisiones y gastos cobrados en las operaciones (comisión RC, gasto legal y gasto de operación). Sirve para ver cuánto se genera por estos conceptos. Respeta el filtro de ejecutivo.</p>
     <div class="ctx-bar" id="ctxComisiones">
       <span class="ctx-pill" id="ctxComisionesPill">—</span>
-      <span class="ctx-text">Fuente: (35) Comisión RC, (34)/(60) gasto legal, (36) gasto operación.</span>
+      <span class="ctx-text">Se toma de las columnas de comisión RC, gasto legal y gasto de operación del maestro de operaciones.</span>
     </div>
     <div class="card">
       <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
@@ -1129,14 +1129,14 @@ select#execFilter:focus-visible{
   <!-- SECTION 4: MORA / AGING -->
   <section class="block" id="secMora">
     <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Aging de mora</h2></div>
-    <p class="sec-desc">Clasificación del book según días de mora. Vigente = aún no vence. Tramos de mora: 0–15, 15–30, 31–60 y 60+ días. El % de mora es el peso del monto en mora sobre el book total.</p>
+    <p class="sec-desc">Clasifica las operaciones según cuántos días llevan vencidas. “Vigente” = todavía no vence. Luego: 0–15 días, 15–30, 31–60 y más de 60 días de atraso. El porcentaje indica qué parte del total está en cada tramo.</p>
     <div class="ctx-bar" id="ctxMora">
       <span class="ctx-pill" id="ctxMoraPill">—</span>
-      <span class="ctx-text" id="ctxMoraText">Fuente: (19) Días de mora y montos del maestro. Respeta filtro de ejecutivo / sesión.</span>
+      <span class="ctx-text" id="ctxMoraText">Se calcula con los días de mora y los montos del maestro de operaciones. Respeta el filtro de ejecutivo.</span>
     </div>
     <div class="card">
       <div class="sec-filters" id="moraFilters" style="margin-bottom:12px;">
-        <label for="moraTramoFilter">Ver tramo</label>
+        <label for="moraTramoFilter">Ver tramo de mora</label>
         <select id="moraTramoFilter">
           <option value="ALL">Todos los tramos</option>
           <option value="vigente">Vigente</option>
@@ -1164,7 +1164,7 @@ select#execFilter:focus-visible{
         </table>
       </div>
       <div class="mora-actions">
-        <button type="button" id="btnDownloadMora" class="btn-refresh" title="Descargar aging de mora en CSV">⬇ Descargar mora (CSV)</button>
+        <button type="button" id="btnDownloadMora" class="btn-refresh" title="Descargar el desglose de mora en CSV">⬇ Descargar mora (CSV)</button>
       </div>
     </div>
   </section>
@@ -1173,10 +1173,10 @@ select#execFilter:focus-visible{
   <!-- SECTION 5: CESIÓN -->
   <section class="block" id="secCesion">
     <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
-    <p class="sec-desc">Stock de facturas nuevas: qué está disponible para ceder y qué ya tiene financiera. El ranking muestra a qué fondos o bancos se cede el book.</p>
+    <p class="sec-desc">Resume cuánto del stock de facturas está libre para ceder y cuánto ya se cedió a una financiera. El ranking muestra a qué bancos o fondos se está cediendo más.</p>
     <div class="ctx-bar" id="ctxCesion">
       <span class="ctx-pill" id="ctxCesionPill">—</span>
-      <span class="ctx-text" id="ctxCesionText">Fuente: reporte de facturas nuevas · Nombre financiera vacío o “-” = disponible.</span>
+      <span class="ctx-text" id="ctxCesionText">Si la factura no tiene nombre de financiera (o dice “-”), se considera disponible para ceder.</span>
     </div>
     <div class="funnel-row">
       <div class="card">
@@ -1203,7 +1203,7 @@ select#execFilter:focus-visible{
     </div>
   </section>
 
-<footer>Dashboard generado a partir de los archivos fuente. Todos los montos en pesos chilenos (CLP), sin decimales. · Uso interno — Acqua Capital.</footer>
+<footer>Montos en pesos chilenos (CLP), sin decimales. Uso interno — Acqua Capital.</footer>
 </div>
 
 <script>
@@ -2060,9 +2060,9 @@ function renderFacturas(){
       extra = ' Filtros activos: ' + parts.join(', ') + '.';
     }
     notes.innerHTML = `<ul>
-      <li>Agrupado por razón social empresa.${extra}</li>
-      <li><b>Disponibles</b> = sin financiera (o “-”). <b>Cedidas</b> = con financiera.</li>
-      <li>Warren promedio ignora celdas “Sin registro”.</li>
+      <li>Las filas están agrupadas por empresa (cliente que emite la factura).${extra}</li>
+      <li><b>Disponibles</b>: facturas que aún no tienen financiera y se pueden ceder. <b>Cedidas</b>: ya tienen banco o fondo asignado.</li>
+      <li>El Warren promedio no incluye facturas marcadas como “Sin registro”.</li>
     </ul>`;
   }
 }
@@ -2467,28 +2467,49 @@ function renderConcentration(){
   const meters = document.getElementById('concMeters');
   const summary = document.getElementById('concSummary');
   const pill = document.getElementById('ctxConcPill');
-  if(!meters || !DATA) return;
+  if(!meters) return { book:0, items:[], top1:0, top3:0, top5:0 };
 
-  let rows = DATA.facturas_table.slice();
-  if(currentExec !== 'ALL') rows = rows.filter(r => r.ejecutivo === currentExec);
-
-  const items = rows.map(r => {
-    const total = (r.disponibles || 0) + (r.cedidas || 0);
-    return { nombre: r.razon_social, ejecutivo: r.ejecutivo, total, disponibles: r.disponibles||0, cedidas: r.cedidas||0 };
-  }).filter(x => x.total > 0);
-
-  const book = items.reduce((s,x) => s + x.total, 0);
-  items.sort((a,b) => b.total - a.total);
-
-  if(pill) pill.textContent = (currentExec === 'ALL' ? 'Todo el book' : currentExec) + ' · ' + fmtCLP(book);
-
-  if(!items.length || book <= 0){
-    meters.innerHTML = '<p class="insight-empty">Sin facturas con monto para calcular concentración.</p>';
+  // Clientes reales = Empresa solicitante (cedente) del maestro de operaciones
+  const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
+  if(!rows.length){
+    meters.innerHTML = '<p class="insight-empty">Sin operaciones en el maestro para calcular concentración de clientes.</p>';
     if(summary) summary.innerHTML = '';
-    return;
+    if(pill) pill.textContent = 'Sin datos';
+    return { book:0, items:[], top1:0, top3:0, top5:0 };
   }
 
-  const topN = items.slice(0, 5);
+  const sample = rows[0] || {};
+  const keys = Object.keys(sample);
+  const colName = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
+  const colAlt = keys.find(k => /\(43\)/.test(k) || /monto final adelantado/i.test(k));
+  const colGiro = keys.find(k => /\(46\)/.test(k) || /monto a giro/i.test(k));
+  const colBruto = keys.find(k => /\(12\)/.test(k) || /monto facturas/i.test(k));
+
+  const by = {};
+  rows.forEach(r => {
+    const name = ((r[colName] || 'Sin nombre') + '').trim() || 'Sin nombre';
+    let monto = colMonto ? toNum(r[colMonto]) : 0;
+    if(monto === 0 && colAlt) monto = toNum(r[colAlt]);
+    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
+    if(monto === 0 && colBruto) monto = toNum(r[colBruto]);
+    if(!by[name]) by[name] = 0;
+    by[name] += monto;
+  });
+
+  const items = Object.keys(by).map(n => ({ nombre: n, total: by[n] })).filter(x => x.total > 0);
+  items.sort((a,b) => b.total - a.total);
+  const book = items.reduce((s,x) => s + x.total, 0);
+
+  if(pill) pill.textContent = (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
+
+  if(!items.length || book <= 0){
+    meters.innerHTML = '<p class="insight-empty">Sin montos de clientes en el maestro.</p>';
+    if(summary) summary.innerHTML = '';
+    return { book:0, items:[], top1:0, top3:0, top5:0 };
+  }
+
+  const topN = items.slice(0, 8);
   meters.innerHTML = topN.map(it => {
     const pct = (it.total / book) * 100;
     const cls = pct >= 25 ? 'danger' : (pct >= 15 ? 'warn' : '');
@@ -2532,7 +2553,7 @@ function renderInsights(conc){
     if(pct >= 25){
       insights.push({
         type:'risk',
-        html: `<b>Concentración alta:</b> ${escapeHtml(top.nombre)} representa el <b>${pct.toFixed(1).replace('.',',')}%</b> del book (${fmtCLP(top.total)}). Sobre el umbral del 25%.`
+        html: `<b>Alerta de concentración:</b> el cliente <b>${escapeHtml(top.nombre)}</b> concentra el <b>${pct.toFixed(1).replace('.',',')}%</b> del total adelantado (${fmtCLP(top.total)}). Superó el límite recomendado del 25%.`
       });
     } else if(pct >= 15){
       insights.push({
@@ -2542,7 +2563,7 @@ function renderInsights(conc){
     } else {
       insights.push({
         type:'ok',
-        html: `<b>Book diversificado:</b> el cliente más grande pesa solo <b>${pct.toFixed(1).replace('.',',')}%</b> (bajo el 15%).`
+        html: `<b>Cartera bien repartida:</b> el cliente más grande representa solo el <b>${pct.toFixed(1).replace('.',',')}%</b> del total (bajo el 15%).`
       });
     }
   }
@@ -2574,7 +2595,7 @@ function renderInsights(conc){
   } else {
     insights.push({
       type:'warn',
-      html: `<b>Sin operaciones</b> cargadas en ${labelMonth(curYm)} para el filtro actual.`
+      html: `<b>No hay operaciones</b> registradas en ${labelMonth(curYm)} con el filtro actual.`
     });
   }
 
@@ -2586,7 +2607,7 @@ function renderInsights(conc){
   if(sinWarren.length){
     insights.push({
       type:'warn',
-      html: `<b>${sinWarren.length} empresa(s)</b> sin Warren numérico suman <b>${fmtCLP(montoSin)}</b>. Revisar calidad de dato antes de decidir cupos.`
+      html: `<b>${sinWarren.length} empresa(s)</b> no tienen puntaje Warren numérico y suman <b>${fmtCLP(montoSin)}</b>. Conviene revisar esos datos antes de asignar cupos.`
     });
   }
 
@@ -2598,8 +2619,8 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Inventario:</b> ${fmtCLP(disp)} disponibles (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
-        + (pDisp >= 60 ? 'Hay mucho stock sin ceder.' : 'La mayor parte del book ya tiene financiera.')
+      html: `<b>Inventario de facturas:</b> ${fmtCLP(disp)} todavía disponibles para ceder (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas a una financiera. `
+        + (pDisp >= 60 ? 'Hay bastante stock pendiente de ceder.' : 'La mayor parte ya tiene financiera asignada.')
     });
   }
 
@@ -2614,7 +2635,7 @@ function renderInsights(conc){
     if(best && best.monto > 0){
       insights.push({
         type:'info',
-        html: `<b>Líder del mes en curso:</b> ${escapeHtml(best.e)} con <b>${fmtCLP(best.monto)}</b> en ${best.ops} operación(es).`
+        html: `<b>Quién más adelantó este mes:</b> ${escapeHtml(best.e)} con <b>${fmtCLP(best.monto)}</b> en ${best.ops} operación(es).`
       });
     }
   }
@@ -2874,9 +2895,9 @@ function renderCesion(){
   }
 
   steps.innerHTML = [
-    { cls:'total', label:'Book total facturas', monto: total, meta: rows.length ? (facturaRowsCache && facturaRowsCache.length ? 'según CSV de facturas' : 'empresas consolidadas') : 'sin filas', pct: 100 },
-    { cls:'disp', label:'Disponibles (sin ceder)', monto: disp, meta: pctDisp.toFixed(1).replace('.',',') + '% del book', pct: pctDisp },
-    { cls:'ced', label:'Cedidas (con financiera)', monto: ced, meta: pctCed.toFixed(1).replace('.',',') + '% del book', pct: pctCed }
+    { cls:'total', label:'Total de facturas', monto: total, meta: rows.length ? (facturaRowsCache && facturaRowsCache.length ? 'según el archivo de facturas' : 'empresas consolidadas') : 'sin filas', pct: 100 },
+    { cls:'disp', label:'Disponibles para ceder', monto: disp, meta: pctDisp.toFixed(1).replace('.',',') + '% del total', pct: pctDisp },
+    { cls:'ced', label:'Ya cedidas a financiera', monto: ced, meta: pctCed.toFixed(1).replace('.',',') + '% del total', pct: pctCed }
   ].map(s => `
     <div class="funnel-step ${s.cls === 'total' ? '' : s.cls}">
       <div class="fs-label">${s.label}</div>
@@ -2888,7 +2909,7 @@ function renderCesion(){
 
   if(conv){
     const tone = conversion >= 50 ? 'ok' : 'warn';
-    conv.innerHTML = `<span class="conv-pill">Conversión a cedidas: <b>${conversion.toFixed(1).replace('.',',')}%</b></span>`;
+    conv.innerHTML = `<span class="conv-pill">Porcentaje ya cedido: <b>${conversion.toFixed(1).replace('.',',')}%</b></span>`;
   }
 
   const ranked = Object.keys(byFin).map(n => ({ nombre: n, monto: byFin[n] }))
@@ -2921,32 +2942,33 @@ function renderDeudorConcentration(){
   const summary = document.getElementById('deudorSummary');
   if(!meters) return;
 
-  if(!facturaRowsCache || !facturaRowsCache.length){
-    meters.innerHTML = '<p class="insight-empty">Sin facturas para calcular deudores.</p>';
+  // Deudores reales = Empresa deudora del maestro de operaciones
+  const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
+  if(!rows.length){
+    meters.innerHTML = '<p class="insight-empty">Sin operaciones en el maestro para calcular concentración de deudores.</p>';
     if(summary) summary.innerHTML = '';
+    const pill0 = document.getElementById('ctxDeudorPill');
+    if(pill0) pill0.textContent = 'Sin datos';
     return;
   }
 
-  const sample = facturaRowsCache[0] || {};
+  const sample = rows[0] || {};
   const keys = Object.keys(sample);
-  const fExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
-  const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
-  const fDeudor = keys.find(k => /raz[oó]n\s*social\s*deudor/i.test(k)) || keys.find(k => /deudor/i.test(k) && /raz[oó]n|nombre/i.test(k)) || 'Razón social deudor';
+  const colName = keys.find(k => /empresa\s*deudora/i.test(k) && !/rut/i.test(k)) || '(28)Empresa deudora';
+  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
+  const colAlt = keys.find(k => /\(43\)/.test(k) || /monto final adelantado/i.test(k));
+  const colGiro = keys.find(k => /\(46\)/.test(k) || /monto a giro/i.test(k));
+  const colBruto = keys.find(k => /\(12\)/.test(k) || /monto facturas/i.test(k));
 
-  const filters = getFactSectionFilters();
-  const fEmp = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
-  const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
-  const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
-  const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
   const byD = {};
-  facturaRowsCache.forEach(r => {
-    const e = r[fExec] || '';
-    if(currentExec !== 'ALL' && e !== currentExec) return;
-    if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha)) return;
-    const d = (r[fDeudor] || 'Sin deudor').trim() || 'Sin deudor';
-    const m = toNum(r[fMonto]);
-    if(!byD[d]) byD[d] = 0;
-    byD[d] += m;
+  rows.forEach(r => {
+    const name = ((r[colName] || 'Sin deudor') + '').trim() || 'Sin deudor';
+    let monto = colMonto ? toNum(r[colMonto]) : 0;
+    if(monto === 0 && colAlt) monto = toNum(r[colAlt]);
+    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
+    if(monto === 0 && colBruto) monto = toNum(r[colBruto]);
+    if(!byD[name]) byD[name] = 0;
+    byD[name] += monto;
   });
 
   const items = Object.keys(byD).map(n => ({ nombre: n, total: byD[n] })).filter(x => x.total > 0);
@@ -2954,10 +2976,10 @@ function renderDeudorConcentration(){
   const book = items.reduce((s,x) => s + x.total, 0);
 
   const deudorPill = document.getElementById('ctxDeudorPill');
-  if(deudorPill) deudorPill.textContent = (currentExec === 'ALL' ? 'Todo el book' : currentExec) + ' · ' + fmtCLP(book);
+  if(deudorPill) deudorPill.textContent = (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
 
   if(!items.length || book <= 0){
-    meters.innerHTML = '<p class="insight-empty">Sin montos por deudor.</p>';
+    meters.innerHTML = '<p class="insight-empty">Sin montos por deudor en el maestro.</p>';
     if(summary) summary.innerHTML = '';
     return;
   }
