@@ -1899,8 +1899,62 @@ function downloadMesCursoChartsCSV(){
 }
 
 function renderFacturas(){
-  let rows = DATA.facturas_table.slice();
-  if(currentExec !== 'ALL') rows = rows.filter(r => r.ejecutivo === currentExec);
+  const filters = getFactSectionFilters();
+  const hasSectionFilter = filters.estado !== 'ALL' || filters.warren !== 'ALL' || !!filters.search;
+
+  let rows;
+
+  if(hasSectionFilter && facturaRowsCache && facturaRowsCache.length){
+    // Re-agregar desde filas crudas con filtros de sección
+    const sample = facturaRowsCache[0] || {};
+    const keys = Object.keys(sample);
+    const fEmp = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
+    const fDeudor = keys.find(k => /raz[oó]n\s*social\s*deudor/i.test(k)) || 'Razón social deudor';
+    const fExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
+    const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
+    const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
+    const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
+
+    const by = {};
+    facturaRowsCache.forEach(r => {
+      const e = r[fExec] || '';
+      if(currentExec !== 'ALL' && e !== currentExec) return;
+      if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters)) return;
+
+      const emp = (r[fEmp] || 'Sin empresa').trim() || 'Sin empresa';
+      const fin = (r[fFin] || '').trim();
+      const isCed = fin && fin !== '-';
+      const monto = toNum(r[fMonto]);
+      let w = null;
+      const wRaw = r[fWar];
+      if(wRaw !== undefined && wRaw !== null && String(wRaw).trim() !== '' && !/^sin/i.test(String(wRaw))){
+        const n = parseFloat(String(wRaw).replace(/[^\d.\-]/g,''));
+        if(!isNaN(n)) w = n;
+      }
+
+      if(!by[emp]) by[emp] = { razon_social: emp, ejecutivo: e, disponibles: 0, cedidas: 0, warrenSum: 0, warrenN: 0 };
+      // si hay varios ejecutivos, conservar el primero o concatenar — dejar el de la fila
+      if(e && !by[emp].ejecutivo) by[emp].ejecutivo = e;
+      if(isCed) by[emp].cedidas += monto;
+      else by[emp].disponibles += monto;
+      if(w !== null){ by[emp].warrenSum += w; by[emp].warrenN += 1; }
+    });
+
+    rows = Object.keys(by).map(k => {
+      const x = by[k];
+      return {
+        razon_social: x.razon_social,
+        ejecutivo: x.ejecutivo,
+        disponibles: x.disponibles,
+        cedidas: x.cedidas,
+        promedio_warren: x.warrenN ? (x.warrenSum / x.warrenN) : null
+      };
+    });
+  } else {
+    rows = DATA.facturas_table.slice();
+    if(currentExec !== 'ALL') rows = rows.filter(r => r.ejecutivo === currentExec);
+  }
+
   rows.sort((a,b) => {
     const aN = a.promedio_warren === null || a.promedio_warren === undefined;
     const bN = b.promedio_warren === null || b.promedio_warren === undefined;
@@ -1924,18 +1978,39 @@ function renderFacturas(){
     </tr>`;
   });
   if(!rows.length){
-    body = '<tr><td colspan="5" style="text-align:center;color:#8a8471;">Sin registros para el ejecutivo seleccionado.</td></tr>';
+    body = '<tr><td colspan="5" style="text-align:center;color:#8a8471;">Sin registros para los filtros seleccionados.</td></tr>';
   }
-  body += `<tr class="total-row"><td class="left">Total general</td><td></td><td>—</td><td>${fmtCLP(totals.disponibles)}</td><td>${fmtCLP(totals.cedidas)}</td></tr>`;
+  body += `<tr class="total-row"><td class="left">Total</td><td></td><td></td><td>${fmtCLP(totals.disponibles)}</td><td>${fmtCLP(totals.cedidas)}</td></tr>`;
 
-  document.getElementById('tbl-facturas').innerHTML =
-    '<thead><tr><th class="left">Razón social empresa</th><th class="left">Ejecutivo</th><th>Promedio Warren</th><th>Facturas disponibles</th><th>Facturas ya cedidas</th></tr></thead><tbody>'
-    + body + '</tbody>';
+  const table = document.getElementById('tbl-facturas');
+  if(table){
+    table.innerHTML = `<thead><tr>
+      <th class="left">Razón social</th>
+      <th class="left">Ejecutivo</th>
+      <th>Warren prom.</th>
+      <th>Disponibles</th>
+      <th>Cedidas</th>
+    </tr></thead><tbody>${body}</tbody>`;
+  }
 
-  document.getElementById('notesFacturas').innerHTML =
-    '<b>Notas y validaciones</b><ul>' + DATA.facturas_notes.map(n => '<li>' + escapeHtml(n) + '</li>').join('') + '</ul>';
+  const notes = document.getElementById('notesFacturas');
+  if(notes){
+    let extra = '';
+    if(hasSectionFilter){
+      const parts = [];
+      if(filters.estado === 'disp') parts.push('solo disponibles');
+      if(filters.estado === 'ced') parts.push('solo cedidas');
+      if(filters.warren !== 'ALL') parts.push('Warren ' + filters.warren);
+      if(filters.search) parts.push('búsqueda "' + filters.search + '"');
+      extra = ' Filtros activos: ' + parts.join(', ') + '.';
+    }
+    notes.innerHTML = `<ul>
+      <li>Agrupado por razón social empresa.${extra}</li>
+      <li><b>Disponibles</b> = sin financiera (o “-”). <b>Cedidas</b> = con financiera.</li>
+      <li>Warren promedio ignora celdas “Sin registro”.</li>
+    </ul>`;
+  }
 }
-
 
 function pctDelta(cur, prev){
   if(prev === 0 && cur === 0) return { cls:'flat', text:'sin cambio', arrow:'' };
@@ -3307,14 +3382,14 @@ if(dateModeEl){
 
 ['factEstadoFilter','factWarrenFilter'].forEach(id => {
   const el = document.getElementById(id);
-  if(el) el.addEventListener('change', () => { if(DATA){ renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); } });
+  if(el) el.addEventListener('change', () => { if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); } });
 });
 const factSearch = document.getElementById('factSearch');
 if(factSearch){
   let t;
   factSearch.addEventListener('input', () => {
     clearTimeout(t);
-    t = setTimeout(() => { if(DATA){ renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); } }, 250);
+    t = setTimeout(() => { if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); } }, 250);
   });
 }
 const moraTramoFilter = document.getElementById('moraTramoFilter');
