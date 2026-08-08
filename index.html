@@ -913,6 +913,10 @@ select#execFilter:focus-visible{
   .conc-exec-legend i{
     width:8px; height:8px; border-radius:2px; display:inline-block;
   }
+  .conc-exec-legend .exec-sep{
+    opacity:0.45; margin:0 2px;
+  }
+  .conc-exec-legend b{ color:var(--ink); font-weight:600; }
 
 </style>
 </head>
@@ -1022,7 +1026,7 @@ select#execFilter:focus-visible{
     <div class="intel-grid">
       <div class="intel-card">
         <h3>Concentración por cliente (cedente)</h3>
-        <p class="intel-sub">Estas son las empresas que emitieron las facturas: a ellas les deben el pago sus compradores (deudores). Nosotros les adelantamos dinero al comprarles esas facturas. El gráfico muestra qué parte del total adelantado se concentra en cada una. Si una sola supera el <b>25%</b>, hay más riesgo de depender demasiado de ese cliente. La barra se divide por <b>ejecutivo</b> (qué % de ese cliente lleva cada uno). Despliega cada cliente para ver su <b>top 5 de deudores</b>.</p>
+        <p class="intel-sub">Estas son las empresas que emitieron las facturas: a ellas les deben el pago sus compradores (deudores). Nosotros les adelantamos dinero al comprarles esas facturas. El gráfico muestra qué parte del total adelantado se concentra en cada una. Si una sola supera el <b>25%</b>, hay más riesgo de depender demasiado de ese cliente. Debajo de cada barra se indica qué <b>% corresponde a cada ejecutivo</b> en ese cliente. Despliega el cliente para ver su <b>top 5 de deudores</b>.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxConcPill">—</span>
           <span class="ctx-text" id="ctxConcText">Se calcula con las operaciones reales del maestro. Respeta el filtro de ejecutivo elegido arriba.</span>
@@ -2559,18 +2563,6 @@ function updateContextBars(){
 }
 
 
-function execColor(name, idx){
-  const palette = [
-    '#1f4d47', '#2a5c55', '#3d7a72', '#c4a35a', '#8f6a24',
-    '#c0392b', '#6b8f71', '#4a6fa5', '#8b5a7a', '#5c6b4a'
-  ];
-  // stable-ish hash
-  let h = 0;
-  const s = String(name || '');
-  for(let i=0;i<s.length;i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return palette[(idx != null ? idx : h) % palette.length];
-}
-
 function renderConcentration(){
   const meters = document.getElementById('concMeters');
   const summary = document.getElementById('concSummary');
@@ -2603,9 +2595,7 @@ function renderConcentration(){
     return monto;
   }
 
-  // by[cliente] = { total, deudores:{}, ejecutivos:{} }
   const by = {};
-  const allExecs = {};
   rows.forEach(r => {
     const cli = ((r[colCli] || 'Sin nombre') + '').trim() || 'Sin nombre';
     const deu = ((r[colDeu] || 'Sin deudor') + '').trim() || 'Sin deudor';
@@ -2617,13 +2607,7 @@ function renderConcentration(){
     by[cli].deudores[deu] += monto;
     if(!by[cli].ejecutivos[exec]) by[cli].ejecutivos[exec] = 0;
     by[cli].ejecutivos[exec] += monto;
-    allExecs[exec] = true;
   });
-
-  // orden estable de ejecutivos para colores
-  const execOrder = Object.keys(allExecs).sort();
-  const execIdx = {};
-  execOrder.forEach((e,i) => { execIdx[e] = i; });
 
   const items = Object.keys(by).map(n => ({
     nombre: n,
@@ -2651,24 +2635,15 @@ function renderConcentration(){
   const topN = items.slice(0, 8);
   meters.innerHTML = topN.map(it => {
     const pct = (it.total / book) * 100;
-    // color de alerta del total (borde sutil via track width already shows share of book)
-    const alertCls = pct >= 25 ? 'danger' : (pct >= 15 ? 'warn' : '');
+    const cls = pct >= 25 ? 'danger' : (pct >= 15 ? 'warn' : '');
     const safe = escapeHtml(it.nombre);
 
-    // barra apilada por ejecutivo (100% del cliente)
-    const segs = it.ejecutivos.map(ex => {
+    // Texto: qué % de este cliente lleva cada ejecutivo
+    const execTxt = it.ejecutivos.map(ex => {
       const ep = it.total > 0 ? (ex.total / it.total * 100) : 0;
-      const color = execColor(ex.nombre, execIdx[ex.nombre]);
-      return `<div class="seg" style="width:${ep}%;background:${color}" title="${escapeHtml(ex.nombre)}: ${ep.toFixed(1)}% · ${fmtCLP(ex.total)}"></div>`;
-    }).join('');
-
-    const legend = it.ejecutivos.map(ex => {
-      const ep = it.total > 0 ? (ex.total / it.total * 100) : 0;
-      const color = execColor(ex.nombre, execIdx[ex.nombre]);
-      // nombre corto: primer nombre + apellido si cabe
-      const short = ex.nombre.length > 22 ? ex.nombre.slice(0,20) + '…' : ex.nombre;
-      return `<span title="${escapeHtml(ex.nombre)}: ${fmtCLP(ex.total)}"><i style="background:${color}"></i>${escapeHtml(short)} ${ep.toFixed(0).replace('.',',')}%</span>`;
-    }).join('');
+      const short = ex.nombre.length > 28 ? ex.nombre.slice(0,26) + '…' : ex.nombre;
+      return `<span title="${escapeHtml(ex.nombre)}: ${fmtCLP(ex.total)}"><b>${escapeHtml(short)}</b> ${ep.toFixed(0).replace('.',',')}%</span>`;
+    }).join('<span class="exec-sep">·</span>');
 
     const top5 = it.deudores.slice(0, 5);
     let drop;
@@ -2693,8 +2668,8 @@ function renderConcentration(){
         <span class="name" title="${safe}">${safe}</span>
         <span class="pct">${pct.toFixed(1).replace('.',',')}% · ${fmtCLP(it.total)}</span>
       </div>
-      <div class="conc-track stacked ${alertCls}">${segs}</div>
-      <div class="conc-exec-legend">${legend}</div>
+      <div class="conc-track"><div class="conc-fill ${cls}" style="width:${Math.min(pct,100)}%"></div></div>
+      <div class="conc-exec-legend">${execTxt}</div>
       ${drop}
     </div>`;
   }).join('');
