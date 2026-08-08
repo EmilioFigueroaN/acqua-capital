@@ -1651,11 +1651,31 @@ function buildData(masterRows, facturaRows, selectedYear){
     months.forEach(m => { summary.ejecutivos[e].months[m] = emptyMetrics(); });
   });
 
-  // Sets para no contar el mismo cliente varias veces en el mismo mes
-  const seenNuevoMes = {}; // key: exec|ym|cliente
-  const seenNuevoAcc = {}; // key: exec|cliente
-  const seenNuevoMesTot = {}; // key: ym|cliente
-  const seenNuevoAccTot = {}; // key: cliente
+  // Cliente nuevo = primera operación del cliente (Empresa solicitante) en el maestro.
+  // Precalcular primera fecha por cliente sobre TODO el archivo (sin filtrar por año).
+  const firstOpMap = {};
+  masterRows.forEach(r => {
+    const cli = String(r[colCli] || '').trim();
+    if(!cli) return;
+    const d = parseFullDate(r[colFecha]);
+    if(!d) return;
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if(!firstOpMap[cli] || day < firstOpMap[cli]) firstOpMap[cli] = day;
+  });
+  // Si el cache tiene más historia, usarla para la primera op real
+  if(typeof masterRowsCache !== 'undefined' && masterRowsCache && masterRowsCache.length){
+    masterRowsCache.forEach(r => {
+      const cli = String(r[colCli] || '').trim();
+      if(!cli) return;
+      const d = parseFullDate(r[colFecha]);
+      if(!d) return;
+      const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      if(!firstOpMap[cli] || day < firstOpMap[cli]) firstOpMap[cli] = day;
+    });
+  }
+
+  const seenNuevoAcc = {};
+  const seenNuevoAccTot = {};
 
   masterRows.forEach(r => {
     const e = r[colExec] || '';
@@ -1663,11 +1683,13 @@ function buildData(masterRows, facturaRows, selectedYear){
     const ym = parseYM(r[colFecha]);
     if(!ym || !summary.ejecutivos[e].months[ym]) return;
 
-    // Cliente nuevo: YYYY-MM = mes de alta del cliente, o SI/NO.
-    // Se cuenta 1 vez por cliente (Empresa solicitante) en el periodo.
-    const nuevoRaw = String(r[colNuevo]||'').trim();
-    const esNuevoFlag = /^SI$/i.test(nuevoRaw) || parseYM(nuevoRaw) === ym;
-    const cliName = String(r[colCli] || r[colNuevo] || ('op-' + Math.random())).trim() || 'sin-nombre';
+    const cliName = String(r[colCli] || '').trim();
+    const dOp = parseFullDate(r[colFecha]);
+    let esPrimera = false;
+    if(cliName && dOp && firstOpMap[cliName]){
+      const day = new Date(dOp.getFullYear(), dOp.getMonth(), dOp.getDate());
+      esPrimera = day.getTime() === firstOpMap[cliName].getTime();
+    }
 
     let monto = toNum(r[colMonto]);
     if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
@@ -1675,15 +1697,18 @@ function buildData(masterRows, facturaRows, selectedYear){
     const dif = colInteres ? toNum(r[colInteres]) : 0;
 
     const cell = summary.ejecutivos[e].months[ym];
-    if(esNuevoFlag){
-      const k1 = e + '|' + ym + '|' + cliName;
-      if(!seenNuevoMes[k1]){ seenNuevoMes[k1] = true; cell.clientes_nuevos += 1; }
-      const k2 = e + '|' + cliName;
-      if(!seenNuevoAcc[k2]){ seenNuevoAcc[k2] = true; summary.ejecutivos[e].accum.clientes_nuevos += 1; }
-      const k3 = ym + '|' + cliName;
-      if(!seenNuevoMesTot[k3]){ seenNuevoMesTot[k3] = true; summary.total.months[ym].clientes_nuevos += 1; }
-      const k4 = cliName;
-      if(!seenNuevoAccTot[k4]){ seenNuevoAccTot[k4] = true; summary.total.accum.clientes_nuevos += 1; }
+    if(esPrimera && cliName){
+      // Una sola vez por cliente en su mes de primera op
+      cell.clientes_nuevos += 1;
+      summary.total.months[ym].clientes_nuevos += 1;
+      if(!seenNuevoAcc[e + '|' + cliName]){
+        seenNuevoAcc[e + '|' + cliName] = true;
+        summary.ejecutivos[e].accum.clientes_nuevos += 1;
+      }
+      if(!seenNuevoAccTot[cliName]){
+        seenNuevoAccTot[cliName] = true;
+        summary.total.accum.clientes_nuevos += 1;
+      }
     }
     cell.operaciones += 1;
     cell.monto_fin += monto;
@@ -1712,7 +1737,7 @@ function buildData(masterRows, facturaRows, selectedYear){
   if(colInteres){
     notes.push('Se utilizó la columna "' + colInteres + '" como Diferencia de precio (interés).');
     notes.push('Monto anticipo: se usa (45); si viene 0, se toma (43) Monto final adelantado o (46) Monto a giro real.');
-    notes.push('Cliente nuevo: se cuenta 1 vez por empresa (solicitante) cuando el campo trae SI o un mes YYYY-MM igual al mes de la operación.');
+    notes.push('Cliente nuevo: se cuenta 1 vez por empresa (solicitante) solo en su primera operación del maestro (fecha de creación más antigua).');
   } else {
     notes.push('No se encontró columna de interés en el maestro; Diferencia de precio = 0.');
   }
@@ -2205,6 +2230,36 @@ function sumMetrics(list){
   return t;
 }
 
+
+/** Primera fecha de creación por Empresa solicitante (sobre todo el maestro, sin filtro de ejecutivo). */
+function buildClientFirstOpMap(){
+  const map = {}; // cliente -> Date (primera op)
+  if(!masterRowsCache || !masterRowsCache.length) return map;
+  const sample = masterRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
+  masterRowsCache.forEach(r => {
+    const cli = String(r[colCli] || '').trim();
+    if(!cli) return;
+    const d = parseFullDate(r[colFecha]);
+    if(!d) return;
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if(!map[cli] || day < map[cli]) map[cli] = day;
+  });
+  return map;
+}
+
+/** ¿Esta fila representa la primera operación del cliente? */
+function isFirstOpOfClient(r, colCli, colFecha, firstMap){
+  const cli = String(r[colCli] || '').trim();
+  if(!cli || !firstMap[cli]) return false;
+  const d = parseFullDate(r[colFecha]);
+  if(!d) return false;
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return day.getTime() === firstMap[cli].getTime();
+}
+
 function metricsForMonth(ym){
   if(!DATA || !ym) return emptyMetrics();
   const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
@@ -2235,17 +2290,17 @@ function metricsForMonthRaw(ym){
   const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
   const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
   const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+  const firstMap = buildClientFirstOpMap();
   const t = emptyMetrics();
   const seen = {};
   masterRowsCache.forEach(r => {
     const e = r[colExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
     if(parseYM(r[colFecha]) !== ym) return;
-    const nuevoRaw = String(r[colNuevo]||'').trim();
-    const esNuevo = /^SI$/i.test(nuevoRaw) || parseYM(nuevoRaw) === ym;
-    if(esNuevo){
-      const cli = String(r[colCli]||'').trim() || ('op-' + Object.keys(seen).length);
-      if(!seen[cli]){ seen[cli] = true; t.clientes_nuevos += 1; }
+    const cli = String(r[colCli]||'').trim();
+    if(cli && isFirstOpOfClient(r, colCli, colFecha, firstMap) && !seen[cli]){
+      seen[cli] = true;
+      t.clientes_nuevos += 1;
     }
     t.operaciones += 1;
     let monto = toNum(r[colMonto]);
@@ -2277,6 +2332,7 @@ function metricsForDateRange(fromStr, toStr){
   const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
 
   const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+  const firstMap = buildClientFirstOpMap();
   const seen = {};
   masterRowsCache.forEach(r => {
     const e = r[colExec] || '';
@@ -2285,13 +2341,11 @@ function metricsForDateRange(fromStr, toStr){
     if(!d) return;
     if(startFrom && d < startFrom) return;
     if(endTo && d > endTo) return;
-    const opYm = parseYM(r[colFecha]);
-    const nuevoRaw = String(r[colNuevo]||'').trim();
-    // SI, o el mes de alta del cliente coincide con el mes de esta operación
-    const esNuevo = /^SI$/i.test(nuevoRaw) || (opYm && parseYM(nuevoRaw) === opYm);
-    if(esNuevo){
-      const cli = String(r[colCli]||'').trim() || ('op-' + Object.keys(seen).length);
-      if(!seen[cli]){ seen[cli] = true; t.clientes_nuevos += 1; }
+    const cli = String(r[colCli]||'').trim();
+    // Solo cuenta si ESTA operación es la primera del cliente en todo el maestro
+    if(cli && isFirstOpOfClient(r, colCli, colFecha, firstMap) && !seen[cli]){
+      seen[cli] = true;
+      t.clientes_nuevos += 1;
     }
     t.operaciones += 1;
     let monto = toNum(r[colMonto]);
