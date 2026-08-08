@@ -75,7 +75,12 @@
     pointer-events:none;
   }
   .hero-inner{max-width:1180px;margin:0 auto;position:relative;z-index:1;}
-  .brand-row{display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:22px;}
+  .brand-row{display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:22px; flex-wrap:wrap;}
+  @media (max-width:520px){
+    .brand-row{ gap:12px; }
+    .brand-row > div[style]{ margin-left:0 !important; width:100%; justify-content:space-between; }
+    .user-chip{ font-size:12px; }
+  }
   .brand-chip{
     background:rgba(255,253,249,0.96); border-radius:12px; padding:11px 20px;
     box-shadow:0 8px 28px rgba(0,0,0,0.22); display:inline-flex; align-items:center;
@@ -152,6 +157,16 @@
   }
 
   /* ---------- TABLE ---------- */
+  .scroll-hint{
+    font-size:11px; color:var(--ink-soft); text-align:center; padding:4px 0 8px;
+    letter-spacing:.02em;
+  }
+  .card.has-scroll{ position:relative; }
+  @media (max-width:760px){
+    table{ font-size:11.5px; }
+    .card{ padding:16px 14px 14px; }
+    .wrap{ padding:0 14px 72px; }
+  }
   table{width:100%; border-collapse:collapse; font-size:13.2px; min-width:760px;}
   thead th{
     text-align:right; font-weight:600; color:var(--ink-soft);
@@ -711,7 +726,12 @@ select#execFilter:focus-visible{
   .funnel-fill.disp{ background:var(--gold); }
   .funnel-fill.ced{ background:var(--acqua); }
   .fin-table-wrap{ max-height:320px; overflow:auto; }
-  .fin-table-wrap table{ min-width:420px; font-size:12.5px; }
+  .fin-table-wrap table{ min-width:0; width:100%; table-layout:fixed; font-size:12.5px; }
+  .fin-table-wrap th, .fin-table-wrap td{ padding:9px 6px; }
+  .fin-table-wrap th:first-child, .fin-table-wrap td:first-child{ width:22px; }
+  .fin-table-wrap td.left, .fin-table-wrap th.left{
+    white-space:normal; word-break:break-word; line-height:1.25;
+  }
   .conv-pill{
     display:inline-block; margin-top:12px;
     background:#e7efe9; border:1px solid #cfe0d6;
@@ -3080,31 +3100,43 @@ function renderComisiones(){
   const colGastoOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
   const colGastoDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
 
-  let rc = 0, legal = 0, op = 0, dealer = 0, n = 0;
+  // (35) Comisión RC es una TASA (%), no un monto en CLP (ej. 0.60, 1.50, 2.35).
+  // Sumarla junto a los gastos en pesos producía un total sin sentido (ej. "$29").
+  // Se reporta como promedio ponderado por Monto a financiar, y se excluye del
+  // total en CLP para no contaminarlo.
+  const colMontoFin = keys.find(k => /\(33\)/.test(k) || /monto\s*a\s*financiar/i.test(k));
+  let rcPctWeighted = 0, rcBase = 0, rcCount = 0, legal = 0, op = 0, dealer = 0, n = 0;
   rows.forEach(r => {
     n += 1;
-    if(colRC) rc += toNum(r[colRC]);
+    if(colRC && r[colRC] !== undefined && String(r[colRC]).trim() !== ''){
+      const pct = toNum(r[colRC]);
+      const base = colMontoFin ? toNum(r[colMontoFin]) : 0;
+      rcPctWeighted += pct * base;
+      rcBase += base;
+      rcCount += 1;
+    }
     if(colGastoLegal) legal += toNum(r[colGastoLegal]);
     if(colGastoOp) op += toNum(r[colGastoOp]);
     if(colGastoDealer) dealer += toNum(r[colGastoDealer]);
   });
-  const total = rc + legal + op + dealer;
+  const rcAvgPct = rcBase > 0 ? (rcPctWeighted / rcBase) : 0;
+  const total = legal + op + dealer;
 
   if(pill){
     const fl = currentExec === 'ALL' ? 'Todos' : currentExec;
-    pill.textContent = fl + ' · ' + n + ' ops · comisiones ' + fmtCLP(total);
+    pill.textContent = fl + ' · ' + n + ' ops · gastos ' + fmtCLP(total) + ' · Comisión RC prom. ' + rcAvgPct.toFixed(2).replace('.',',') + '%';
   }
 
   tiles.innerHTML = `
-    <div class="mora-tile vigente"><div class="mt-label">Comisión RC</div><div class="mt-monto">${fmtCLP(rc)}</div><div class="mt-meta">${n} ops</div></div>
-    <div class="mora-tile m015"><div class="mt-label">Total comisiones + gastos</div><div class="mt-monto">${fmtCLP(total)}</div><div class="mt-meta">RC + legal + op + dealer</div></div>
+    <div class="mora-tile vigente"><div class="mt-label">Comisión RC (promedio)</div><div class="mt-monto">${rcAvgPct.toFixed(2).replace('.',',')}%</div><div class="mt-meta">${rcCount} ops con dato · ponderado por monto a financiar</div></div>
+    <div class="mora-tile m015"><div class="mt-label">Total gastos (CLP)</div><div class="mt-monto">${fmtCLP(total)}</div><div class="mt-meta">legal + op + dealer</div></div>
   `;
   tbody.innerHTML = `
-    <tr><td class="left">Comisión RC (35)</td><td>${fmtInt(n)}</td><td>${fmtCLP(rc)}</td></tr>
+    <tr><td class="left">Comisión RC (35) — tasa promedio</td><td>${fmtInt(rcCount)}</td><td>${rcAvgPct.toFixed(2).replace('.',',')}%</td></tr>
     <tr><td class="left">Gasto legal Comisión RC</td><td>${fmtInt(n)}</td><td>${fmtCLP(legal)}</td></tr>
     <tr><td class="left">Gasto operación (sin IVA)</td><td>${fmtInt(n)}</td><td>${fmtCLP(op)}</td></tr>
     <tr><td class="left">Gasto operación dealer</td><td>${fmtInt(n)}</td><td>${fmtCLP(dealer)}</td></tr>
-    <tr class="total-row"><td class="left">Total</td><td>${fmtInt(n)}</td><td>${fmtCLP(total)}</td></tr>
+    <tr class="total-row"><td class="left">Total gastos (CLP)</td><td>${fmtInt(n)}</td><td>${fmtCLP(total)}</td></tr>
   `;
 }
 
@@ -3266,7 +3298,34 @@ function renderAll(){
   renderDeudorConcentration();
   renderWarrenSeg();
   renderFacturasDetalle();
+  addTableScrollHints();
 }
+
+/* Marca con una pista visual ("← desliza →") las tablas que se desbordan
+   horizontalmente en pantallas angostas, para que no parezca que la tabla
+   está cortada o rota — solo muestran la primera columna sin este aviso. */
+function addTableScrollHints(){
+  document.querySelectorAll('table').forEach(table => {
+    const scrollParent = table.closest('.tbl-scroll, .mora-table-wrap, .fin-table-wrap, .detail-scroll, .card') || table.parentElement;
+    const directParent = table.parentElement;
+    if(!scrollParent || !directParent) return;
+    const overflows = table.scrollWidth > scrollParent.clientWidth + 4;
+    let hint = directParent.querySelector(':scope > .scroll-hint');
+    if(overflows && window.innerWidth <= 760){
+      if(!hint){
+        hint = document.createElement('div');
+        hint.className = 'scroll-hint';
+        hint.textContent = '← desliza para ver más columnas →';
+        directParent.insertBefore(hint, table);
+      }
+      scrollParent.classList.add('has-scroll');
+    } else if(hint){
+      hint.remove();
+      scrollParent.classList.remove('has-scroll');
+    }
+  });
+}
+window.addEventListener('resize', () => { if(DATA) addTableScrollHints(); });
 
 /* ===================== 4. CARGAR CSV → ACTUALIZAR ===================== */
 async function loadFromCSV(){
