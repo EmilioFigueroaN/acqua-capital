@@ -376,6 +376,11 @@ select#execFilter:focus-visible{
   .kpi-mode-block{
     display:inline-flex; flex-wrap:wrap; align-items:center; gap:12px 14px;
   }
+  .kpi-hint{
+    font-size:12px; color:var(--ink-soft); font-weight:500;
+    background:#eef4f2; border:1px solid #cfe0d6; color:var(--teal-deep);
+    padding:5px 10px; border-radius:20px;
+  }
   .kpi-controls .kpi-period-tag{
     margin-left:auto; font-size:12px; color:var(--teal-deep); font-weight:600;
     background:#e7efe9; border:1px solid #cfe0d6; padding:5px 11px; border-radius:20px;
@@ -899,10 +904,23 @@ select#execFilter:focus-visible{
   <!-- KPI STRIP -->
   <div class="kpi-controls" id="kpiControls">
     <label for="kpiMode">Analizar</label>
-    <select id="kpiMode" aria-label="Modo de análisis">
+    <select id="kpiMode" aria-label="Qué quieres ver">
+      <option value="day">Por día</option>
+      <option value="week">Por semana</option>
       <option value="month">Por mes</option>
-      <option value="range">Por fechas</option>
     </select>
+
+    <span id="kpiDayWrap" class="kpi-mode-block" hidden>
+      <label for="kpiDay">Día</label>
+      <input type="date" id="kpiDay" aria-label="Día a analizar">
+      <span class="kpi-hint">Se compara con el día anterior</span>
+    </span>
+
+    <span id="kpiWeekWrap" class="kpi-mode-block" hidden>
+      <label for="kpiWeek">Semana (lunes)</label>
+      <input type="date" id="kpiWeek" aria-label="Lunes de la semana">
+      <span class="kpi-hint">Se compara con la semana anterior</span>
+    </span>
 
     <span id="kpiMonthWrap" class="kpi-mode-block">
       <label for="kpiMonth">Mes</label>
@@ -913,18 +931,6 @@ select#execFilter:focus-visible{
         <option value="same_last_year">Mismo mes año anterior</option>
         <option value="year_avg">Promedio del año</option>
         <option value="prev_year_total">Total año anterior (mensualizado)</option>
-      </select>
-    </span>
-
-    <span id="kpiRangeWrap" class="kpi-mode-block" hidden>
-      <label for="kpiDateFrom">Desde</label>
-      <input type="date" id="kpiDateFrom" aria-label="Fecha desde">
-      <label for="kpiDateTo">Hasta</label>
-      <input type="date" id="kpiDateTo" aria-label="Fecha hasta">
-      <label for="kpiRangeBase">Comparar con</label>
-      <select id="kpiRangeBase" aria-label="Base de comparación del rango">
-        <option value="prev_equal">Periodo anterior igual</option>
-        <option value="none">Sin comparación</option>
       </select>
     </span>
 
@@ -1403,10 +1409,9 @@ let currentExec = 'ALL';
 let selectedYear = new Date().getFullYear();
 let kpiMonthYm = null; // null = mes calendario actual
 let kpiBase = 'prev_month';
-let kpiMode = 'month'; // 'month' | 'range'
-let kpiDateFrom = '';
-let kpiDateTo = '';
-let kpiRangeBase = 'prev_equal';
+let kpiMode = 'month'; // 'day' | 'week' | 'month'
+let kpiDay = '';   // YYYY-MM-DD
+let kpiWeek = '';  // YYYY-MM-DD (monday)
 let masterRowsCache = [];
 let facturaRowsCache = [];
 
@@ -2215,37 +2220,43 @@ function yearAverageMetrics(year){
   };
 }
 
+function toISODate(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y + '-' + m + '-' + day;
+}
+
+function mondayOf(d){
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = x.getDay(); // 0 sun
+  const diff = (day === 0 ? -6 : 1 - day);
+  x.setDate(x.getDate() + diff);
+  return x;
+}
+
 function setupKpiControls(){
   const modeEl = document.getElementById('kpiMode');
+  const dayWrap = document.getElementById('kpiDayWrap');
+  const weekWrap = document.getElementById('kpiWeekWrap');
   const monthWrap = document.getElementById('kpiMonthWrap');
-  const rangeWrap = document.getElementById('kpiRangeWrap');
+  const dayEl = document.getElementById('kpiDay');
+  const weekEl = document.getElementById('kpiWeek');
   const selMonth = document.getElementById('kpiMonth');
   const selBase = document.getElementById('kpiBase');
-  const dateFrom = document.getElementById('kpiDateFrom');
-  const dateTo = document.getElementById('kpiDateTo');
-  const rangeBase = document.getElementById('kpiRangeBase');
   if(!modeEl || !DATA) return;
 
-  // defaults de fechas: mes calendario actual
-  const cal = DATA.generated_current_month || '';
-  if(!kpiDateFrom || !kpiDateTo){
-    if(cal && /^\d{4}-\d{2}$/.test(cal)){
-      const [y,m] = cal.split('-').map(Number);
-      const last = new Date(y, m, 0).getDate();
-      kpiDateFrom = cal + '-01';
-      kpiDateTo = cal + '-' + String(last).padStart(2,'0');
-    } else {
-      const now = new Date();
-      const y = now.getFullYear(), m = now.getMonth();
-      kpiDateFrom = y + '-' + String(m+1).padStart(2,'0') + '-01';
-      const last = new Date(y, m+1, 0).getDate();
-      kpiDateTo = y + '-' + String(m+1).padStart(2,'0') + '-' + String(last).padStart(2,'0');
-    }
-  }
+  const today = new Date();
+  if(!kpiDay) kpiDay = toISODate(today);
+  if(!kpiWeek) kpiWeek = toISODate(mondayOf(today));
 
   modeEl.value = kpiMode;
+  if(dayWrap) dayWrap.hidden = kpiMode !== 'day';
+  if(weekWrap) weekWrap.hidden = kpiMode !== 'week';
   if(monthWrap) monthWrap.hidden = kpiMode !== 'month';
-  if(rangeWrap) rangeWrap.hidden = kpiMode !== 'range';
+
+  if(dayEl) dayEl.value = kpiDay;
+  if(weekEl) weekEl.value = kpiWeek;
 
   if(selMonth){
     const opts = DATA.months.slice();
@@ -2261,24 +2272,26 @@ function setupKpiControls(){
     selMonth.value = kpiMonthYm;
   }
   if(selBase) selBase.value = kpiBase;
-  if(dateFrom) dateFrom.value = kpiDateFrom;
-  if(dateTo) dateTo.value = kpiDateTo;
-  if(rangeBase) rangeBase.value = kpiRangeBase;
 
-  // wire once
   if(!modeEl._wired){
     modeEl._wired = true;
     modeEl.addEventListener('change', () => {
       kpiMode = modeEl.value;
+      if(dayWrap) dayWrap.hidden = kpiMode !== 'day';
+      if(weekWrap) weekWrap.hidden = kpiMode !== 'week';
       if(monthWrap) monthWrap.hidden = kpiMode !== 'month';
-      if(rangeWrap) rangeWrap.hidden = kpiMode !== 'range';
+      renderKpis(); updateContextBars();
+    });
+    if(dayEl) dayEl.addEventListener('change', () => { kpiDay = dayEl.value; renderKpis(); updateContextBars(); });
+    if(weekEl) weekEl.addEventListener('change', () => {
+      // normalizar al lunes de esa semana
+      const d = parseFullDate(weekEl.value);
+      if(d){ kpiWeek = toISODate(mondayOf(d)); weekEl.value = kpiWeek; }
+      else kpiWeek = weekEl.value;
       renderKpis(); updateContextBars();
     });
     if(selMonth) selMonth.addEventListener('change', () => { kpiMonthYm = selMonth.value; renderKpis(); updateContextBars(); });
     if(selBase) selBase.addEventListener('change', () => { kpiBase = selBase.value; renderKpis(); updateContextBars(); });
-    if(dateFrom) dateFrom.addEventListener('change', () => { kpiDateFrom = dateFrom.value; renderKpis(); updateContextBars(); });
-    if(dateTo) dateTo.addEventListener('change', () => { kpiDateTo = dateTo.value; renderKpis(); updateContextBars(); });
-    if(rangeBase) rangeBase.addEventListener('change', () => { kpiRangeBase = rangeBase.value; renderKpis(); updateContextBars(); });
   }
 }
 
@@ -2290,24 +2303,29 @@ function renderKpis(){
 
   let cur, prev, baseLabel, tagText;
 
-  if(kpiMode === 'range'){
-    let from = kpiDateFrom || '';
-    let to = kpiDateTo || '';
-    if(from && to && from > to){ const tmp = from; from = to; to = tmp; }
-    cur = metricsForDateRange(from, to);
-    if(kpiRangeBase === 'prev_equal' && from && to){
-      const span = daysBetweenISO(from, to); // inclusive length - 1
-      const prevTo = shiftDateISO(from, -1);
-      const prevFrom = shiftDateISO(prevTo, -span);
-      prev = metricsForDateRange(prevFrom, prevTo);
-      baseLabel = 'vs ' + fmtISO_es(prevFrom) + ' → ' + fmtISO_es(prevTo);
-      tagText = fmtISO_es(from) + ' → ' + fmtISO_es(to) + ' · ' + baseLabel;
-    } else {
-      prev = emptyMetrics();
-      baseLabel = 'sin comparación';
-      tagText = (from && to) ? (fmtISO_es(from) + ' → ' + fmtISO_es(to)) : 'Rango de fechas';
-    }
+  if(kpiMode === 'day'){
+    const day = kpiDay || toISODate(new Date());
+    cur = metricsForDateRange(day, day);
+    const prevDay = shiftDateISO(day, -1);
+    prev = metricsForDateRange(prevDay, prevDay);
+    baseLabel = 'vs ' + fmtISO_es(prevDay);
+    tagText = fmtISO_es(day) + ' · ' + baseLabel;
+  } else if(kpiMode === 'week'){
+    let mon = parseFullDate(kpiWeek) || mondayOf(new Date());
+    mon = mondayOf(mon);
+    const monISO = toISODate(mon);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const sunISO = toISODate(sun);
+    cur = metricsForDateRange(monISO, sunISO);
+    const prevMon = new Date(mon); prevMon.setDate(mon.getDate() - 7);
+    const prevSun = new Date(prevMon); prevSun.setDate(prevMon.getDate() + 6);
+    const prevMonISO = toISODate(prevMon);
+    const prevSunISO = toISODate(prevSun);
+    prev = metricsForDateRange(prevMonISO, prevSunISO);
+    baseLabel = 'vs ' + fmtISO_es(prevMonISO) + ' → ' + fmtISO_es(prevSunISO);
+    tagText = fmtISO_es(monISO) + ' → ' + fmtISO_es(sunISO) + ' · semana ant.';
   } else {
+    // month
     const curYm = kpiMonthYm || DATA.generated_current_month;
     cur = metricsForMonthRaw(curYm);
     const [cy, cm] = curYm.split('-').map(Number);
