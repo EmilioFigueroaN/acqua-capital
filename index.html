@@ -806,6 +806,42 @@ select#execFilter:focus-visible{
     border:1.5px solid var(--line); border-radius:8px; background:var(--white);
   }
 
+  .age-filter-wrap{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    margin-left:4px;
+  }
+  .age-filter-wrap label{
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.04em; color:var(--ink-soft); white-space:nowrap;
+  }
+  .age-filter-wrap input[type="range"]{
+    -webkit-appearance:none; appearance:none;
+    width:140px; height:6px; border-radius:999px;
+    background:linear-gradient(90deg, var(--teal-deep), var(--teal));
+    outline:none; cursor:pointer;
+  }
+  .age-filter-wrap input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:16px; height:16px; border-radius:50%;
+    background:var(--teal-deep); border:2px solid #fff;
+    box-shadow:0 1px 4px rgba(24,61,56,0.35); cursor:pointer;
+  }
+  .age-filter-wrap input[type="range"]::-moz-range-thumb{
+    width:16px; height:16px; border-radius:50%;
+    background:var(--teal-deep); border:2px solid #fff;
+    box-shadow:0 1px 4px rgba(24,61,56,0.35); cursor:pointer;
+  }
+  .age-filter-wrap .age-val{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:36px; height:28px; padding:0 10px;
+    background:var(--paper); border:1px solid var(--line);
+    border-radius:10px; font-family:'IBM Plex Mono',monospace;
+    font-size:13px; font-weight:600; color:var(--ink);
+  }
+  .age-filter-wrap .age-unlimited{
+    font-size:11px; color:var(--ink-soft); margin-left:2px;
+  }
+
 </style>
 </head>
 <body>
@@ -866,27 +902,6 @@ select#execFilter:focus-visible{
     </div>
     <span class="filter-tag" id="filterTag" aria-live="polite">Mostrando todos los ejecutivos</span>
     <button type="button" id="btnRefresh" class="btn-refresh" title="Volver a leer los CSV" aria-label="Actualizar datos desde los archivos CSV">↻ Actualizar desde CSV</button>
-    <div class="date-filter-row">
-      <label for="dateMode">Periodo</label>
-      <select id="dateMode" title="Filtro temporal">
-        <option value="all">Todo el historial</option>
-        <option value="day">Un día</option>
-        <option value="week">Una semana</option>
-        <option value="last7">Últimos 7 días</option>
-        <option value="last15">Últimos 15 días</option>
-        <option value="last30">Últimos 30 días</option>
-        <option value="custom">Rango personalizado</option>
-      </select>
-      <label for="dateDay" id="lblDateDay" hidden>Día</label>
-      <input type="date" id="dateDay" hidden>
-      <label for="dateWeek" id="lblDateWeek" hidden>Semana (lunes)</label>
-      <input type="date" id="dateWeek" hidden title="Elige el lunes de la semana">
-      <label for="dateFrom" id="lblDateFrom" hidden>Desde</label>
-      <input type="date" id="dateFrom" hidden>
-      <label for="dateTo" id="lblDateTo" hidden>Hasta</label>
-      <input type="date" id="dateTo" hidden>
-      <span class="filter-tag" id="dateFilterTag" style="background:#eef4f2;color:var(--teal-deep);">Periodo: todo</span>
-    </div>
     <span class="load-status" id="loadStatus" role="status" aria-live="polite"></span>
   </div>
 
@@ -984,7 +999,7 @@ select#execFilter:focus-visible{
   <!-- SECTION 3 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Facturas nuevas</h2></div>
-    <p class="sec-desc">Estado del book de facturas nuevas, agrupado por empresa. Sirve para ver qué está disponible para ceder y qué ya tiene financiera.</p>
+    <p class="sec-desc">Consolidado por Razón social empresa desde reporteFacturasNuevas, filtrable por ejecutivo (filtro global) y por antigüedad de la factura. Disponibles = Monto total sin financiera asignada; cedidas = Monto total con financiera asignada. Ordenado de mayor a menor según Warren 2.</p>
     <div class="sec-filters" id="factFilters">
       <label for="factEstadoFilter">Estado</label>
       <select id="factEstadoFilter">
@@ -1002,6 +1017,12 @@ select#execFilter:focus-visible{
       </select>
       <label for="factSearch">Buscar</label>
       <input type="search" id="factSearch" placeholder="Empresa o deudor…" style="font-family:inherit;font-size:13px;padding:6px 10px;border:1.5px solid var(--line);border-radius:8px;min-width:180px;">
+      <div class="age-filter-wrap" title="Solo facturas con fecha dentro de los últimos N días. 0 = sin límite.">
+        <label for="factAgeMax">Antigüedad máxima (días)</label>
+        <input type="range" id="factAgeMax" min="0" max="90" value="15" step="1" aria-valuemin="0" aria-valuemax="90" aria-valuenow="15">
+        <span class="age-val" id="factAgeMaxVal">15</span>
+        <span class="age-unlimited" id="factAgeUnlimited" hidden>sin límite</span>
+      </div>
     </div>
     <div class="ctx-bar" id="ctxFacturas">
       <span class="ctx-pill" id="ctxFacturasPill">—</span>
@@ -1063,14 +1084,14 @@ select#execFilter:focus-visible{
   <!-- COMISIONES + CARTERA -->
   <section class="block" id="secComisiones">
     <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Comisiones y concentración de cartera</h2></div>
-    <p class="sec-desc">Comisiones del maestro (Comisión RC y gastos asociados). Concentración de la cartera operativa por cliente (cedente) y por deudor, con el filtro de periodo y ejecutivo.</p>
+    <p class="sec-desc">Comisiones del maestro (Comisión RC y gastos asociados). Concentración de la cartera operativa por cliente (cedente) y por deudor, con el filtro de ejecutivo.</p>
     <div class="ctx-bar" id="ctxComisiones">
       <span class="ctx-pill" id="ctxComisionesPill">—</span>
       <span class="ctx-text">Fuente: (35) Comisión RC, (34)/(60) gasto legal, (36) gasto operación. Cliente = Empresa solicitante · Deudor = Empresa deudora.</span>
     </div>
     <div class="funnel-row">
       <div class="card">
-        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Comisiones del periodo</h3>
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Comisiones</h3>
         <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
         <div class="mora-table-wrap" style="margin-top:12px;">
           <table id="tbl-comisiones">
@@ -1920,7 +1941,7 @@ function downloadMesCursoChartsCSV(){
 
 function renderFacturas(){
   const filters = getFactSectionFilters();
-  const hasSectionFilter = filters.estado !== 'ALL' || filters.warren !== 'ALL' || !!filters.search;
+  const hasSectionFilter = filters.estado !== 'ALL' || filters.warren !== 'ALL' || !!filters.search || (filters.ageMax > 0);
 
   let rows;
 
@@ -1934,12 +1955,13 @@ function renderFacturas(){
     const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
     const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
     const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
+    const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
 
     const by = {};
     facturaRowsCache.forEach(r => {
       const e = r[fExec] || '';
       if(currentExec !== 'ALL' && e !== currentExec) return;
-      if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters)) return;
+      if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha)) return;
 
       const emp = (r[fEmp] || 'Sin empresa').trim() || 'Sin empresa';
       const fin = (r[fFin] || '').trim();
@@ -2022,6 +2044,7 @@ function renderFacturas(){
       if(filters.estado === 'ced') parts.push('solo cedidas');
       if(filters.warren !== 'ALL') parts.push('Warren ' + filters.warren);
       if(filters.search) parts.push('búsqueda "' + filters.search + '"');
+      if(filters.ageMax > 0) parts.push('antigüedad ≤ ' + filters.ageMax + ' días');
       extra = ' Filtros activos: ' + parts.join(', ') + '.';
     }
     notes.innerHTML = `<ul>
@@ -2760,11 +2783,12 @@ function renderDeudorConcentration(){
   const fEmp = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
   const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
   const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
+  const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
   const byD = {};
   facturaRowsCache.forEach(r => {
     const e = r[fExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
-    if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters)) return;
+    if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha)) return;
     const d = (r[fDeudor] || 'Sin deudor').trim() || 'Sin deudor';
     const m = toNum(r[fMonto]);
     if(!byD[d]) byD[d] = 0;
@@ -2827,6 +2851,10 @@ function renderWarrenSeg(){
   const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
   const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
   const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
+  const fEmp = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
+  const fDeudor = keys.find(k => /raz[oó]n\s*social\s*deudor/i.test(k)) || 'Razón social deudor';
+  const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
+  const filters = getFactSectionFilters();
 
   const cells = {
     'alto|disp': {label:'Warren alto · Disponible', monto:0, n:0},
@@ -2842,6 +2870,7 @@ function renderWarrenSeg(){
   facturaRowsCache.forEach(r => {
     const e = r[fExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
+    if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha)) return;
     const monto = toNum(r[fMonto]);
     const fin = (r[fFin] || '').trim();
     const ced = fin && fin !== '-';
@@ -2869,14 +2898,18 @@ function renderWarrenSeg(){
 
 
 function getFactSectionFilters(){
+  const ageEl = document.getElementById('factAgeMax');
+  let ageMax = ageEl ? parseInt(ageEl.value, 10) : 15;
+  if(isNaN(ageMax)) ageMax = 15;
   return {
     estado: document.getElementById('factEstadoFilter')?.value || 'ALL',
     warren: document.getElementById('factWarrenFilter')?.value || 'ALL',
-    search: (document.getElementById('factSearch')?.value || '').trim().toLowerCase()
+    search: (document.getElementById('factSearch')?.value || '').trim().toLowerCase(),
+    ageMax: ageMax // 0 = sin límite
   };
 }
 
-function passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters){
+function passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha){
   const fin = (r[fFin] || '').trim();
   const isCed = fin && fin !== '-';
   if(filters.estado === 'disp' && isCed) return false;
@@ -2892,6 +2925,17 @@ function passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters){
   if(filters.search){
     const blob = ((r[fEmp]||'') + ' ' + (r[fDeudor]||'')).toLowerCase();
     if(!blob.includes(filters.search)) return false;
+  }
+  // Antigüedad máxima (días): 0 = sin límite
+  if(filters.ageMax && filters.ageMax > 0 && fFecha){
+    const d = parseFullDate(r[fFecha]);
+    if(!d) return false;
+    const today = new Date();
+    const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startFact = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const ageDays = Math.floor((startToday - startFact) / 86400000);
+    if(ageDays < 0) return true;
+    if(ageDays > filters.ageMax) return false;
   }
   return true;
 }
@@ -2919,7 +2963,7 @@ function renderFacturasDetalle(){
   const filters = getFactSectionFilters();
   let rows = facturaRowsCache.filter(r => {
     if(currentExec !== 'ALL' && (r[fExec] || '') !== currentExec) return false;
-    return passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters);
+    return passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha);
   });
 
   // limit display for performance but export all filtered
@@ -2966,26 +3010,19 @@ function downloadFacturasDetalleCSV(){
 }
 
 
-/* ---- Filtro de periodo (día / semana / días móviles) ---- */
-let dateMode = 'all';
-let dateRange = { from: null, to: null }; // Date objects inclusive, local
-
+/* parseFullDate — usado por filtro de antigüedad de facturas y otras secciones */
 function parseFullDate(val){
   if(val == null || val === '') return null;
   const s = String(val).trim();
   let m;
-  // M/D/YYYY or MM/DD/YYYY
   if((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))){
     const mo = parseInt(m[1],10), d = parseInt(m[2],10), y = parseInt(m[3],10);
-    // if first > 12 treat as D/M/YYYY
     if(mo > 12) return new Date(y, d - 1, mo);
     return new Date(y, mo - 1, d);
   }
-  // YYYY-MM-DD
   if((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))){
     return new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
   }
-  // D-M-YYYY or DD-MM-YYYY
   if((m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/))){
     return new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10));
   }
@@ -2994,86 +3031,11 @@ function parseFullDate(val){
   return null;
 }
 
-function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
-
-function applyDateMode(){
-  const mode = document.getElementById('dateMode')?.value || 'all';
-  dateMode = mode;
-  const dayEl = document.getElementById('dateDay');
-  const weekEl = document.getElementById('dateWeek');
-  const fromEl = document.getElementById('dateFrom');
-  const toEl = document.getElementById('dateTo');
-  const show = (ids, on) => ids.forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.hidden = !on;
-  });
-  show(['dateDay','lblDateDay'], mode === 'day');
-  show(['dateWeek','lblDateWeek'], mode === 'week');
-  show(['dateFrom','lblDateFrom','dateTo','lblDateTo'], mode === 'custom');
-
-  const today = startOfDay(new Date());
-  let from = null, to = null;
-
-  if(mode === 'all'){
-    from = to = null;
-  } else if(mode === 'day'){
-    const v = dayEl?.value;
-    const d = v ? parseFullDate(v) : today;
-    from = startOfDay(d); to = endOfDay(d);
-  } else if(mode === 'week'){
-    const v = weekEl?.value;
-    let d = v ? parseFullDate(v) : today;
-    // monday of that week
-    const day = d.getDay(); // 0 sun
-    const diff = (day === 0 ? -6 : 1 - day);
-    const mon = new Date(d); mon.setDate(d.getDate() + diff);
-    from = startOfDay(mon);
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    to = endOfDay(sun);
-  } else if(mode === 'last7'){
-    to = endOfDay(today);
-    from = startOfDay(new Date(today)); from.setDate(from.getDate() - 6);
-  } else if(mode === 'last15'){
-    to = endOfDay(today);
-    from = startOfDay(new Date(today)); from.setDate(from.getDate() - 14);
-  } else if(mode === 'last30'){
-    to = endOfDay(today);
-    from = startOfDay(new Date(today)); from.setDate(from.getDate() - 29);
-  } else if(mode === 'custom'){
-    from = fromEl?.value ? startOfDay(parseFullDate(fromEl.value)) : null;
-    to = toEl?.value ? endOfDay(parseFullDate(toEl.value)) : null;
-  }
-  dateRange = { from, to };
-  const tag = document.getElementById('dateFilterTag');
-  if(tag){
-    if(!from && !to) tag.textContent = 'Periodo: todo';
-    else {
-      const fmt = d => d ? d.toLocaleDateString('es-CL') : '…';
-      tag.textContent = 'Periodo: ' + fmt(from) + ' → ' + fmt(to);
-    }
-  }
-}
-
-function masterRowsInPeriod(){
-  if(!masterRowsCache) return [];
-  if(!dateRange.from && !dateRange.to) return masterRowsCache.slice();
-  const sample = masterRowsCache[0] || {};
-  const keys = Object.keys(sample);
-  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
-  return masterRowsCache.filter(r => {
-    const d = parseFullDate(r[colFecha]);
-    if(!d) return false;
-    if(dateRange.from && d < dateRange.from) return false;
-    if(dateRange.to && d > dateRange.to) return false;
-    return true;
-  });
-}
-
 function masterRowsFiltered(){
-  let rows = masterRowsInPeriod();
+  if(!masterRowsCache) return [];
+  let rows = masterRowsCache.slice();
   if(currentExec === 'ALL') return rows;
-  const sample = rows[0] || masterRowsCache[0] || {};
+  const sample = rows[0] || {};
   const keys = Object.keys(sample);
   const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k));
   return rows.filter(r => (r[colExec] || '') === currentExec);
@@ -3087,7 +3049,7 @@ function renderComisiones(){
 
   const rows = masterRowsFiltered();
   if(!rows.length){
-    tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">Sin operaciones en el periodo / filtro.</p>';
+    tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">Sin operaciones con el filtro actual.</p>';
     tbody.innerHTML = '';
     if(pill) pill.textContent = 'Sin datos';
     return;
@@ -3151,7 +3113,7 @@ function renderCarteraSide(kind){
   if(!meters) return;
   const rows = masterRowsFiltered();
   if(!rows.length){
-    meters.innerHTML = '<p class="insight-empty">Sin datos de cartera en el periodo.</p>';
+    meters.innerHTML = '<p class="insight-empty">Sin datos de cartera con el filtro actual.</p>';
     if(summary) summary.innerHTML = '';
     return;
   }
@@ -3427,29 +3389,36 @@ const btnDownloadDetalleFact = document.getElementById('btnDownloadDetalleFact')
 if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', downloadFacturasDetalleCSV);
 
 
-const dateModeEl = document.getElementById('dateMode');
-if(dateModeEl){
-  const refreshDates = () => { applyDateMode(); if(DATA) renderAll(); };
-  dateModeEl.addEventListener('change', refreshDates);
-  ['dateDay','dateWeek','dateFrom','dateTo'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.addEventListener('change', refreshDates);
-  });
-  applyDateMode();
+
+function refreshFacturasSection(){
+  if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); renderCesion(); }
 }
-
-
 ['factEstadoFilter','factWarrenFilter'].forEach(id => {
   const el = document.getElementById(id);
-  if(el) el.addEventListener('change', () => { if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); } });
+  if(el) el.addEventListener('change', refreshFacturasSection);
 });
 const factSearch = document.getElementById('factSearch');
 if(factSearch){
   let t;
   factSearch.addEventListener('input', () => {
     clearTimeout(t);
-    t = setTimeout(() => { if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); } }, 250);
+    t = setTimeout(refreshFacturasSection, 250);
   });
+}
+const factAgeMax = document.getElementById('factAgeMax');
+const factAgeMaxVal = document.getElementById('factAgeMaxVal');
+const factAgeUnlimited = document.getElementById('factAgeUnlimited');
+function syncAgeMaxUI(){
+  if(!factAgeMax) return;
+  const v = parseInt(factAgeMax.value, 10) || 0;
+  factAgeMax.setAttribute('aria-valuenow', String(v));
+  if(factAgeMaxVal) factAgeMaxVal.textContent = v === 0 ? '∞' : String(v);
+  if(factAgeUnlimited) factAgeUnlimited.hidden = v !== 0;
+}
+if(factAgeMax){
+  syncAgeMaxUI();
+  factAgeMax.addEventListener('input', () => { syncAgeMaxUI(); });
+  factAgeMax.addEventListener('change', () => { syncAgeMaxUI(); refreshFacturasSection(); });
 }
 const moraTramoFilter = document.getElementById('moraTramoFilter');
 if(moraTramoFilter){
