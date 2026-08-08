@@ -719,6 +719,34 @@ select#execFilter:focus-visible{
     padding:6px 12px; border-radius:20px;
   }
 
+
+  /* ---------- DEUDOR / DETALLE / WARREN SEG ---------- */
+  .dual-conc{
+    display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px;
+  }
+  @media (max-width:900px){ .dual-conc{ grid-template-columns:1fr; } }
+  .seg-matrix{
+    display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:8px;
+  }
+  @media (max-width:600px){ .seg-matrix{ grid-template-columns:1fr; } }
+  .seg-cell{
+    background:var(--paper); border:1px solid var(--line); border-radius:12px;
+    padding:14px 14px 12px;
+  }
+  .seg-cell .sc-label{
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.04em; color:var(--ink-soft); margin-bottom:6px;
+  }
+  .seg-cell .sc-value{
+    font-family:'Fraunces',serif; font-size:18px; font-weight:600; color:var(--ink);
+  }
+  .seg-cell .sc-meta{
+    font-size:11.5px; color:#8a8471; margin-top:4px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .detail-scroll{ max-height:380px; overflow:auto; margin-top:8px; }
+  .detail-scroll table{ min-width:900px; font-size:12px; }
+
 </style>
 </head>
 <body>
@@ -884,6 +912,46 @@ select#execFilter:focus-visible{
       <button type="button" id="btnDownloadFacturas" class="btn-refresh" title="Descargar en CSV la tabla de Facturas nuevas">⬇ Descargar Facturas nuevas (CSV)</button>
     </div>
     <div class="notes" id="notesFacturas"></div>
+
+    <div class="dual-conc" style="margin-top:18px;">
+      <div class="card">
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Concentración por deudor</h3>
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Peso de cada deudor sobre el book de facturas (oportunidades). Respeta filtro de ejecutivo.</p>
+        <div class="conc-meters" id="deudorMeters"></div>
+        <div class="conc-summary" id="deudorSummary"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Segmentación Warren × cesión</h3>
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Warren alto ≥ 400 · medio 200–399 · bajo &lt; 200 o sin dato. Cruce con disponible / cedida.</p>
+        <div class="seg-matrix" id="warrenSegMatrix"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Detalle de facturas (oportunidades)</h3>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px;">Una fila por factura del CSV. Filtro de ejecutivo aplicado.</p>
+      <div class="detail-scroll">
+        <table id="tbl-facturas-detalle">
+          <thead>
+            <tr>
+              <th class="left">Empresa</th>
+              <th class="left">Deudor</th>
+              <th class="left">Ejecutivo</th>
+              <th>Folio</th>
+              <th>Fecha</th>
+              <th>Monto</th>
+              <th>Warren</th>
+              <th class="left">Financiera</th>
+              <th class="left">Estado</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="chart-download-row">
+        <button type="button" id="btnDownloadDetalleFact" class="btn-refresh" title="Descargar detalle de facturas">⬇ Descargar detalle facturas (CSV)</button>
+      </div>
+    </div>
   </section>
 
   
@@ -2307,6 +2375,37 @@ function downloadMoraCSV(){
   downloadCSV('aging_mora_' + filterSuffix + '.csv', window._moraExportRows);
 }
 
+
+/** Unifica nombres de financieras para no duplicar por mayúsculas / variantes. */
+function normalizeFinanciera(name){
+  let s = String(name || '').trim();
+  if(!s || s === '-') return '';
+  s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  s = s.toUpperCase().replace(/\s+/g, ' ').trim();
+  s = s.replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+  const rules = [
+    [/^BANCO\s+SANTANDER/, 'BANCO SANTANDER'],
+    [/^SANTANDER/, 'BANCO SANTANDER'],
+    [/^FACTORING\s+Y\s+SERVICIOS\s+DE\s+COBRANZA/, 'FACTORING Y SERVICIOS DE COBRANZA'],
+    [/^FACTORING\s+SECURITY/, 'FACTORING SECURITY S.A.'],
+    [/^CBP\s+FINANCIA/, 'CBP FINANCIA CAPITAL'],
+    [/^FINANCIA\s+CAPITAL/, 'FINANCIA CAPITAL'],
+    [/^BLANCO\s+FINANCIERO/, 'BLANCO FINANCIERO'],
+    [/^VISION\s+CAPITAL/, 'VISION CAPITAL'],
+    [/^BANCO\s+DE\s+CHILE/, 'BANCO DE CHILE'],
+    [/^BANCO\s+CONSORCIO/, 'BANCO CONSORCIO'],
+    [/^CORPBANCA/, 'CORPBANCA'],
+    [/^MOONK/, 'MOONK FACTORING'],
+    [/^PENTA\s+FINANCIERO/, 'PENTA FINANCIERO'],
+    [/^NUVIA\s+CAPITAL/, 'NUVIA CAPITAL'],
+    [/^PROGRESO/, 'PROGRESO S.A.'],
+  ];
+  for(const [re, canon] of rules){
+    if(re.test(s)) return canon;
+  }
+  return s;
+}
+
 function renderCesion(){
   const steps = document.getElementById('funnelSteps');
   const conv = document.getElementById('funnelConv');
@@ -2410,6 +2509,198 @@ function renderCesion(){
     </tr>`;
 }
 
+
+function renderDeudorConcentration(){
+  const meters = document.getElementById('deudorMeters');
+  const summary = document.getElementById('deudorSummary');
+  if(!meters) return;
+
+  if(!facturaRowsCache || !facturaRowsCache.length){
+    meters.innerHTML = '<p class="insight-empty">Sin facturas para calcular deudores.</p>';
+    if(summary) summary.innerHTML = '';
+    return;
+  }
+
+  const sample = facturaRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const fExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
+  const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
+  const fDeudor = keys.find(k => /raz[oó]n\s*social\s*deudor/i.test(k)) || keys.find(k => /deudor/i.test(k) && /raz[oó]n|nombre/i.test(k)) || 'Razón social deudor';
+
+  const byD = {};
+  facturaRowsCache.forEach(r => {
+    const e = r[fExec] || '';
+    if(currentExec !== 'ALL' && e !== currentExec) return;
+    const d = (r[fDeudor] || 'Sin deudor').trim() || 'Sin deudor';
+    const m = toNum(r[fMonto]);
+    if(!byD[d]) byD[d] = 0;
+    byD[d] += m;
+  });
+
+  const items = Object.keys(byD).map(n => ({ nombre: n, total: byD[n] })).filter(x => x.total > 0);
+  items.sort((a,b) => b.total - a.total);
+  const book = items.reduce((s,x) => s + x.total, 0);
+
+  if(!items.length || book <= 0){
+    meters.innerHTML = '<p class="insight-empty">Sin montos por deudor.</p>';
+    if(summary) summary.innerHTML = '';
+    return;
+  }
+
+  const topN = items.slice(0, 8);
+  meters.innerHTML = topN.map(it => {
+    const pct = (it.total / book) * 100;
+    const cls = pct >= 25 ? 'danger' : (pct >= 15 ? 'warn' : '');
+    return `<div class="conc-row">
+      <div class="conc-top">
+        <span class="name" title="${escapeHtml(it.nombre)}">${escapeHtml(it.nombre)}</span>
+        <span class="pct">${pct.toFixed(1).replace('.',',')}% · ${fmtCLP(it.total)}</span>
+      </div>
+      <div class="conc-track"><div class="conc-fill ${cls}" style="width:${Math.min(pct,100)}%"></div></div>
+    </div>`;
+  }).join('');
+
+  const top1 = items[0] ? (items[0].total / book) * 100 : 0;
+  const top3 = items.slice(0,3).reduce((s,x)=>s+x.total,0) / book * 100;
+  const top5 = items.slice(0,5).reduce((s,x)=>s+x.total,0) / book * 100;
+  if(summary){
+    summary.innerHTML = `
+      <div><div class="s-label">Top 1</div><div class="s-val">${top1.toFixed(1).replace('.',',')}%</div></div>
+      <div><div class="s-label">Top 3</div><div class="s-val">${top3.toFixed(1).replace('.',',')}%</div></div>
+      <div><div class="s-label">Top 5</div><div class="s-val">${top5.toFixed(1).replace('.',',')}%</div></div>
+    `;
+  }
+}
+
+function warrenBand(w){
+  if(w === null || w === undefined || isNaN(w)) return 'sin';
+  if(w >= 400) return 'alto';
+  if(w >= 200) return 'medio';
+  return 'bajo';
+}
+
+function renderWarrenSeg(){
+  const el = document.getElementById('warrenSegMatrix');
+  if(!el) return;
+  if(!facturaRowsCache || !facturaRowsCache.length){
+    el.innerHTML = '<p class="insight-empty">Sin datos.</p>';
+    return;
+  }
+
+  const sample = facturaRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const fExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
+  const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
+  const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
+  const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
+
+  const cells = {
+    'alto|disp': {label:'Warren alto · Disponible', monto:0, n:0},
+    'alto|ced': {label:'Warren alto · Cedida', monto:0, n:0},
+    'medio|disp': {label:'Warren medio · Disponible', monto:0, n:0},
+    'medio|ced': {label:'Warren medio · Cedida', monto:0, n:0},
+    'bajo|disp': {label:'Warren bajo · Disponible', monto:0, n:0},
+    'bajo|ced': {label:'Warren bajo · Cedida', monto:0, n:0},
+    'sin|disp': {label:'Sin Warren · Disponible', monto:0, n:0},
+    'sin|ced': {label:'Sin Warren · Cedida', monto:0, n:0},
+  };
+
+  facturaRowsCache.forEach(r => {
+    const e = r[fExec] || '';
+    if(currentExec !== 'ALL' && e !== currentExec) return;
+    const monto = toNum(r[fMonto]);
+    const fin = (r[fFin] || '').trim();
+    const ced = fin && fin !== '-';
+    let wRaw = r[fWar];
+    let w = null;
+    if(wRaw !== undefined && wRaw !== null && String(wRaw).trim() !== '' && !/^sin/i.test(String(wRaw))){
+      const n = parseFloat(String(wRaw).replace(/[^\d.\-]/g,''));
+      if(!isNaN(n)) w = n;
+    }
+    const band = warrenBand(w);
+    const key = band + '|' + (ced ? 'ced' : 'disp');
+    if(cells[key]){ cells[key].monto += monto; cells[key].n += 1; }
+  });
+
+  const order = ['alto|disp','alto|ced','medio|disp','medio|ced','bajo|disp','bajo|ced','sin|disp','sin|ced'];
+  el.innerHTML = order.map(k => {
+    const c = cells[k];
+    return `<div class="seg-cell">
+      <div class="sc-label">${c.label}</div>
+      <div class="sc-value">${fmtCLP(c.monto)}</div>
+      <div class="sc-meta">${c.n} factura(s)</div>
+    </div>`;
+  }).join('');
+}
+
+function renderFacturasDetalle(){
+  const tbody = document.querySelector('#tbl-facturas-detalle tbody');
+  if(!tbody) return;
+  if(!facturaRowsCache || !facturaRowsCache.length){
+    tbody.innerHTML = '<tr><td colspan="9" class="left" style="font-weight:400;color:#8a8471">Sin filas de facturas.</td></tr>';
+    window._factDetalleExport = null;
+    return;
+  }
+
+  const sample = facturaRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const fEmp = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
+  const fDeudor = keys.find(k => /raz[oó]n\s*social\s*deudor/i.test(k)) || 'Razón social deudor';
+  const fExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
+  const fFolio = keys.find(k => /^folio$/i.test(k)) || 'Folio';
+  const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
+  const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
+  const fWar = keys.find(k => /warren\s*2/i.test(k)) || 'Warren 2';
+  const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
+
+  let rows = facturaRowsCache.filter(r => {
+    if(currentExec === 'ALL') return true;
+    return (r[fExec] || '') === currentExec;
+  });
+
+  // limit display for performance but export all filtered
+  const exportRows = [['Empresa','Deudor','Ejecutivo','Folio','Fecha','Monto','Warren','Financiera','Estado']];
+  const maxShow = 300;
+  let body = '';
+  rows.forEach((r, i) => {
+    const fin = (r[fFin] || '').trim();
+    const estado = (fin && fin !== '-') ? 'Cedida' : 'Disponible';
+    const monto = toNum(r[fMonto]);
+    const war = r[fWar];
+    exportRows.push([
+      r[fEmp]||'', r[fDeudor]||'', r[fExec]||'', r[fFolio]||'', r[fFecha]||'',
+      Math.round(monto), war != null ? String(war) : '', fin || '-', estado
+    ]);
+    if(i < maxShow){
+      body += `<tr>
+        <td class="left">${escapeHtml(r[fEmp]||'')}</td>
+        <td class="left" style="font-weight:400">${escapeHtml(r[fDeudor]||'')}</td>
+        <td class="left" style="font-weight:400;color:var(--ink-soft)">${escapeHtml(r[fExec]||'')}</td>
+        <td>${escapeHtml(String(r[fFolio]||''))}</td>
+        <td>${escapeHtml(String(r[fFecha]||''))}</td>
+        <td>${fmtCLP(monto)}</td>
+        <td>${escapeHtml(war != null && String(war).trim() !== '' ? String(war) : '—')}</td>
+        <td class="left" style="font-weight:400">${escapeHtml(fin || '—')}</td>
+        <td class="left" style="font-weight:400">${estado}</td>
+      </tr>`;
+    }
+  });
+  if(rows.length > maxShow){
+    body += `<tr><td colspan="9" class="left" style="font-weight:400;color:#8a8471">Mostrando ${maxShow} de ${rows.length} filas. Descarga el CSV para el detalle completo.</td></tr>`;
+  }
+  tbody.innerHTML = body || '<tr><td colspan="9" class="left" style="font-weight:400;color:#8a8471">Sin filas.</td></tr>';
+  window._factDetalleExport = exportRows;
+}
+
+function downloadFacturasDetalleCSV(){
+  if(!window._factDetalleExport || window._factDetalleExport.length < 2){
+    alert('No hay detalle de facturas para descargar.');
+    return;
+  }
+  const filterSuffix = currentExec === 'ALL' ? 'todos' : currentExec.replace(/\s+/g, '_');
+  downloadCSV('facturas_detalle_' + filterSuffix + '.csv', window._factDetalleExport);
+}
+
 function renderAll(){
   if(!DATA) return;
   renderKpis();
@@ -2420,6 +2711,9 @@ function renderAll(){
   renderResumen();
   renderMesCurso();
   renderFacturas();
+  renderDeudorConcentration();
+  renderWarrenSeg();
+  renderFacturasDetalle();
 }
 
 /* ===================== 4. CARGAR CSV → ACTUALIZAR ===================== */
@@ -2517,6 +2811,9 @@ if(btnDownloadFacturas) btnDownloadFacturas.addEventListener('click', downloadFa
 
 const btnDownloadMora = document.getElementById('btnDownloadMora');
 if(btnDownloadMora) btnDownloadMora.addEventListener('click', downloadMoraCSV);
+
+const btnDownloadDetalleFact = document.getElementById('btnDownloadDetalleFact');
+if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', downloadFacturasDetalleCSV);
 
 document.getElementById('btnLogin').addEventListener('click', attemptLogin);
 document.getElementById('btnLogout').addEventListener('click', logout);
