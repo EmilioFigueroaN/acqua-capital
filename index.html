@@ -367,6 +367,15 @@ select#execFilter:focus-visible{
     appearance:none; -webkit-appearance:none; color:var(--ink); cursor:pointer;
   }
   .kpi-controls select:focus{ outline:2px solid var(--gold); outline-offset:1px; }
+  .kpi-controls input[type="date"]{
+    font-family:'Inter',sans-serif; font-size:13.5px; font-weight:600;
+    padding:6px 10px; border-radius:8px; border:1.5px solid var(--line);
+    background:var(--paper); color:var(--ink); cursor:pointer;
+  }
+  .kpi-controls input[type="date"]:focus{ outline:2px solid var(--gold); outline-offset:1px; }
+  .kpi-mode-block{
+    display:inline-flex; flex-wrap:wrap; align-items:center; gap:12px 14px;
+  }
   .kpi-controls .kpi-period-tag{
     margin-left:auto; font-size:12px; color:var(--teal-deep); font-weight:600;
     background:#e7efe9; border:1px solid #cfe0d6; padding:5px 11px; border-radius:20px;
@@ -889,15 +898,36 @@ select#execFilter:focus-visible{
 
   <!-- KPI STRIP -->
   <div class="kpi-controls" id="kpiControls">
-    <label for="kpiMonth">Mes a analizar</label>
-    <select id="kpiMonth" aria-label="Mes a analizar"></select>
-    <label for="kpiBase">Comparar con</label>
-    <select id="kpiBase" aria-label="Base de comparación">
-      <option value="prev_month">Mes anterior</option>
-      <option value="same_last_year">Mismo mes año anterior</option>
-      <option value="year_avg">Promedio del año</option>
-      <option value="prev_year_total">Total año anterior (mensualizado)</option>
+    <label for="kpiMode">Analizar</label>
+    <select id="kpiMode" aria-label="Modo de análisis">
+      <option value="month">Por mes</option>
+      <option value="range">Por fechas</option>
     </select>
+
+    <span id="kpiMonthWrap" class="kpi-mode-block">
+      <label for="kpiMonth">Mes</label>
+      <select id="kpiMonth" aria-label="Mes a analizar"></select>
+      <label for="kpiBase">Comparar con</label>
+      <select id="kpiBase" aria-label="Base de comparación">
+        <option value="prev_month">Mes anterior</option>
+        <option value="same_last_year">Mismo mes año anterior</option>
+        <option value="year_avg">Promedio del año</option>
+        <option value="prev_year_total">Total año anterior (mensualizado)</option>
+      </select>
+    </span>
+
+    <span id="kpiRangeWrap" class="kpi-mode-block" hidden>
+      <label for="kpiDateFrom">Desde</label>
+      <input type="date" id="kpiDateFrom" aria-label="Fecha desde">
+      <label for="kpiDateTo">Hasta</label>
+      <input type="date" id="kpiDateTo" aria-label="Fecha hasta">
+      <label for="kpiRangeBase">Comparar con</label>
+      <select id="kpiRangeBase" aria-label="Base de comparación del rango">
+        <option value="prev_equal">Periodo anterior igual</option>
+        <option value="none">Sin comparación</option>
+      </select>
+    </span>
+
     <span class="kpi-period-tag" id="kpiPeriodTag">—</span>
   </div>
   <div class="kpi-grid" id="kpiGrid" aria-label="Indicadores clave">
@@ -1373,6 +1403,10 @@ let currentExec = 'ALL';
 let selectedYear = new Date().getFullYear();
 let kpiMonthYm = null; // null = mes calendario actual
 let kpiBase = 'prev_month';
+let kpiMode = 'month'; // 'month' | 'range'
+let kpiDateFrom = '';
+let kpiDateTo = '';
+let kpiRangeBase = 'prev_equal';
 let masterRowsCache = [];
 let facturaRowsCache = [];
 
@@ -2095,6 +2129,68 @@ function metricsForMonthRaw(ym){
   return t;
 }
 
+/** Métricas entre dos fechas (inclusive) sobre Fecha creación del maestro. */
+function metricsForDateRange(fromStr, toStr){
+  const t = emptyMetrics();
+  if(!masterRowsCache || !masterRowsCache.length) return t;
+  const from = fromStr ? parseFullDate(fromStr) : null;
+  const to = toStr ? parseFullDate(toStr) : null;
+  const startFrom = from ? new Date(from.getFullYear(), from.getMonth(), from.getDate()) : null;
+  const endTo = to ? new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999) : null;
+
+  const sample = masterRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
+  const colNuevo = keys.find(k => /cliente\s*nuevo/i.test(k)) || '(24)Cliente nuevo';
+  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
+  const colInteres = keys.find(k => /\(41\)/.test(k)) || keys.find(k => /interes/i.test(k) && !/tasa/i.test(k)) || null;
+  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
+  const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
+  const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
+
+  masterRowsCache.forEach(r => {
+    const e = r[colExec] || '';
+    if(currentExec !== 'ALL' && e !== currentExec) return;
+    const d = parseFullDate(r[colFecha]);
+    if(!d) return;
+    if(startFrom && d < startFrom) return;
+    if(endTo && d > endTo) return;
+    const nuevoRaw = String(r[colNuevo]||'').trim();
+    t.clientes_nuevos += /^SI$/i.test(nuevoRaw) ? 1 : 0;
+    t.operaciones += 1;
+    let monto = toNum(r[colMonto]);
+    if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
+    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
+    t.monto_fin += monto;
+    t.dif_precio += colInteres ? toNum(r[colInteres]) : 0;
+  });
+  return t;
+}
+
+function shiftDateISO(iso, days){
+  const d = parseFullDate(iso);
+  if(!d) return iso;
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y + '-' + m + '-' + day;
+}
+
+function daysBetweenISO(a, b){
+  const da = parseFullDate(a), db = parseFullDate(b);
+  if(!da || !db) return 0;
+  const sa = new Date(da.getFullYear(), da.getMonth(), da.getDate());
+  const sb = new Date(db.getFullYear(), db.getMonth(), db.getDate());
+  return Math.round((sb - sa) / 86400000);
+}
+
+function fmtISO_es(iso){
+  const d = parseFullDate(iso);
+  if(!d) return iso || '…';
+  return d.toLocaleDateString('es-CL');
+}
+
 function yearAverageMetrics(year){
   const months = [];
   for(let mo=1; mo<=12; mo++) months.push(year + '-' + String(mo).padStart(2,'0'));
@@ -2120,27 +2216,70 @@ function yearAverageMetrics(year){
 }
 
 function setupKpiControls(){
+  const modeEl = document.getElementById('kpiMode');
+  const monthWrap = document.getElementById('kpiMonthWrap');
+  const rangeWrap = document.getElementById('kpiRangeWrap');
   const selMonth = document.getElementById('kpiMonth');
   const selBase = document.getElementById('kpiBase');
-  if(!selMonth || !DATA) return;
+  const dateFrom = document.getElementById('kpiDateFrom');
+  const dateTo = document.getElementById('kpiDateTo');
+  const rangeBase = document.getElementById('kpiRangeBase');
+  if(!modeEl || !DATA) return;
 
-  // Meses del año seleccionado + mes calendario si está en otro año
-  const opts = DATA.months.slice();
-  const cal = DATA.generated_current_month;
-  if(opts.indexOf(cal) === -1) opts.push(cal);
-  // Default: mes calendario
-  if(!kpiMonthYm || opts.indexOf(kpiMonthYm) === -1){
-    kpiMonthYm = opts.indexOf(cal) !== -1 ? cal : opts[opts.length - 1];
+  // defaults de fechas: mes calendario actual
+  const cal = DATA.generated_current_month || '';
+  if(!kpiDateFrom || !kpiDateTo){
+    if(cal && /^\d{4}-\d{2}$/.test(cal)){
+      const [y,m] = cal.split('-').map(Number);
+      const last = new Date(y, m, 0).getDate();
+      kpiDateFrom = cal + '-01';
+      kpiDateTo = cal + '-' + String(last).padStart(2,'0');
+    } else {
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth();
+      kpiDateFrom = y + '-' + String(m+1).padStart(2,'0') + '-01';
+      const last = new Date(y, m+1, 0).getDate();
+      kpiDateTo = y + '-' + String(m+1).padStart(2,'0') + '-' + String(last).padStart(2,'0');
+    }
   }
-  selMonth.innerHTML = opts.map(ym => {
-    const label = labelMonth(ym) + (ym === cal ? ' (actual)' : '');
-    return `<option value="${ym}">${label}</option>`;
-  }).join('');
-  selMonth.value = kpiMonthYm;
-  selBase.value = kpiBase;
 
-  selMonth.onchange = () => { kpiMonthYm = selMonth.value; renderKpis(); updateContextBars(); };
-  selBase.onchange = () => { kpiBase = selBase.value; renderKpis(); updateContextBars(); };
+  modeEl.value = kpiMode;
+  if(monthWrap) monthWrap.hidden = kpiMode !== 'month';
+  if(rangeWrap) rangeWrap.hidden = kpiMode !== 'range';
+
+  if(selMonth){
+    const opts = DATA.months.slice();
+    const calYm = DATA.generated_current_month;
+    if(opts.indexOf(calYm) === -1 && calYm) opts.push(calYm);
+    if(!kpiMonthYm || opts.indexOf(kpiMonthYm) === -1){
+      kpiMonthYm = opts.indexOf(calYm) !== -1 ? calYm : opts[opts.length - 1];
+    }
+    selMonth.innerHTML = opts.map(ym => {
+      const label = labelMonth(ym) + (ym === calYm ? ' (actual)' : '');
+      return `<option value="${ym}">${label}</option>`;
+    }).join('');
+    selMonth.value = kpiMonthYm;
+  }
+  if(selBase) selBase.value = kpiBase;
+  if(dateFrom) dateFrom.value = kpiDateFrom;
+  if(dateTo) dateTo.value = kpiDateTo;
+  if(rangeBase) rangeBase.value = kpiRangeBase;
+
+  // wire once
+  if(!modeEl._wired){
+    modeEl._wired = true;
+    modeEl.addEventListener('change', () => {
+      kpiMode = modeEl.value;
+      if(monthWrap) monthWrap.hidden = kpiMode !== 'month';
+      if(rangeWrap) rangeWrap.hidden = kpiMode !== 'range';
+      renderKpis(); updateContextBars();
+    });
+    if(selMonth) selMonth.addEventListener('change', () => { kpiMonthYm = selMonth.value; renderKpis(); updateContextBars(); });
+    if(selBase) selBase.addEventListener('change', () => { kpiBase = selBase.value; renderKpis(); updateContextBars(); });
+    if(dateFrom) dateFrom.addEventListener('change', () => { kpiDateFrom = dateFrom.value; renderKpis(); updateContextBars(); });
+    if(dateTo) dateTo.addEventListener('change', () => { kpiDateTo = dateTo.value; renderKpis(); updateContextBars(); });
+    if(rangeBase) rangeBase.addEventListener('change', () => { kpiRangeBase = rangeBase.value; renderKpis(); updateContextBars(); });
+  }
 }
 
 function renderKpis(){
@@ -2149,35 +2288,55 @@ function renderKpis(){
 
   setupKpiControls();
 
-  const curYm = kpiMonthYm || DATA.generated_current_month;
-  const cur = metricsForMonthRaw(curYm);
-  const [cy, cm] = curYm.split('-').map(Number);
+  let cur, prev, baseLabel, tagText;
 
-  let prev, baseLabel;
-  if(kpiBase === 'same_last_year'){
-    const prevYm = (cy - 1) + '-' + String(cm).padStart(2,'0');
-    prev = metricsForMonthRaw(prevYm);
-    baseLabel = 'vs ' + labelMonthShort(prevYm);
-  } else if(kpiBase === 'year_avg'){
-    prev = yearAverageMetrics(cy);
-    baseLabel = 'vs promedio ' + cy;
-  } else if(kpiBase === 'prev_year_total'){
-    // promedio mensual del año anterior (total/12) para comparar un mes
-    const avg = yearAverageMetrics(cy - 1);
-    prev = avg;
-    baseLabel = 'vs prom. mensual ' + (cy - 1);
+  if(kpiMode === 'range'){
+    let from = kpiDateFrom || '';
+    let to = kpiDateTo || '';
+    if(from && to && from > to){ const tmp = from; from = to; to = tmp; }
+    cur = metricsForDateRange(from, to);
+    if(kpiRangeBase === 'prev_equal' && from && to){
+      const span = daysBetweenISO(from, to); // inclusive length - 1
+      const prevTo = shiftDateISO(from, -1);
+      const prevFrom = shiftDateISO(prevTo, -span);
+      prev = metricsForDateRange(prevFrom, prevTo);
+      baseLabel = 'vs ' + fmtISO_es(prevFrom) + ' → ' + fmtISO_es(prevTo);
+      tagText = fmtISO_es(from) + ' → ' + fmtISO_es(to) + ' · ' + baseLabel;
+    } else {
+      prev = emptyMetrics();
+      baseLabel = 'sin comparación';
+      tagText = (from && to) ? (fmtISO_es(from) + ' → ' + fmtISO_es(to)) : 'Rango de fechas';
+    }
   } else {
-    // prev_month
-    const prevYm = shiftMonth(curYm, -1);
-    prev = metricsForMonthRaw(prevYm);
-    baseLabel = 'vs ' + labelMonthShort(prevYm);
+    const curYm = kpiMonthYm || DATA.generated_current_month;
+    cur = metricsForMonthRaw(curYm);
+    const [cy, cm] = curYm.split('-').map(Number);
+
+    if(kpiBase === 'same_last_year'){
+      const prevYm = (cy - 1) + '-' + String(cm).padStart(2,'0');
+      prev = metricsForMonthRaw(prevYm);
+      baseLabel = 'vs ' + labelMonthShort(prevYm);
+    } else if(kpiBase === 'year_avg'){
+      prev = yearAverageMetrics(cy);
+      baseLabel = 'vs promedio ' + cy;
+    } else if(kpiBase === 'prev_year_total'){
+      prev = yearAverageMetrics(cy - 1);
+      baseLabel = 'vs prom. ' + (cy - 1);
+    } else {
+      let pm = cm - 1, py = cy;
+      if(pm < 1){ pm = 12; py--; }
+      const prevYm = py + '-' + String(pm).padStart(2,'0');
+      prev = metricsForMonthRaw(prevYm);
+      baseLabel = 'vs ' + labelMonthShort(prevYm);
+    }
+    tagText = labelMonth(curYm) + ' · ' + baseLabel;
   }
 
   const ticketCur = cur.operaciones ? cur.monto_fin / cur.operaciones : 0;
   const ticketPrev = prev.operaciones ? prev.monto_fin / prev.operaciones : 0;
 
   const tag = document.getElementById('kpiPeriodTag');
-  if(tag) tag.textContent = labelMonth(curYm) + ' · ' + baseLabel;
+  if(tag) tag.textContent = tagText;
 
   const items = [
     {
@@ -2220,10 +2379,7 @@ function renderKpis(){
       <span class="kpi-sub">${it.sub}</span>
     </div>
   `).join('');
-  // refresca textos de contexto (mes/base pueden haber cambiado)
-  if(typeof updateContextBars === 'function'){ /* se llama desde renderAll */ }
 }
-
 
 function filterLabel(){
   return currentExec === 'ALL' ? 'Todos los ejecutivos' : currentExec;
