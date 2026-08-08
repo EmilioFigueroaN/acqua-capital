@@ -807,6 +807,27 @@ select#execFilter:focus-visible{
     </div>
     <span class="filter-tag" id="filterTag" aria-live="polite">Mostrando todos los ejecutivos</span>
     <button type="button" id="btnRefresh" class="btn-refresh" title="Volver a leer los CSV" aria-label="Actualizar datos desde los archivos CSV">↻ Actualizar desde CSV</button>
+    <div class="date-filter-row">
+      <label for="dateMode">Periodo</label>
+      <select id="dateMode" title="Filtro temporal">
+        <option value="all">Todo el historial</option>
+        <option value="day">Un día</option>
+        <option value="week">Una semana</option>
+        <option value="last7">Últimos 7 días</option>
+        <option value="last15">Últimos 15 días</option>
+        <option value="last30">Últimos 30 días</option>
+        <option value="custom">Rango personalizado</option>
+      </select>
+      <label for="dateDay" id="lblDateDay" hidden>Día</label>
+      <input type="date" id="dateDay" hidden>
+      <label for="dateWeek" id="lblDateWeek" hidden>Semana (lunes)</label>
+      <input type="date" id="dateWeek" hidden title="Elige el lunes de la semana">
+      <label for="dateFrom" id="lblDateFrom" hidden>Desde</label>
+      <input type="date" id="dateFrom" hidden>
+      <label for="dateTo" id="lblDateTo" hidden>Hasta</label>
+      <input type="date" id="dateTo" hidden>
+      <span class="filter-tag" id="dateFilterTag" style="background:#eef4f2;color:var(--teal-deep);">Periodo: todo</span>
+    </div>
     <span class="load-status" id="loadStatus" role="status" aria-live="polite"></span>
   </div>
 
@@ -955,6 +976,43 @@ select#execFilter:focus-visible{
   </section>
 
   
+  
+  <!-- COMISIONES + CARTERA -->
+  <section class="block" id="secComisiones">
+    <div class="sec-head"><span class="sec-num">●</span><h2 class="sec-title">Comisiones y concentración de cartera</h2></div>
+    <p class="sec-desc">Comisiones del maestro (Comisión RC y gastos asociados). Concentración de la cartera operativa por cliente (cedente) y por deudor, con el filtro de periodo y ejecutivo.</p>
+    <div class="ctx-bar" id="ctxComisiones">
+      <span class="ctx-pill" id="ctxComisionesPill">—</span>
+      <span class="ctx-text">Fuente: (35) Comisión RC, (34)/(60) gasto legal, (36) gasto operación. Cliente = Empresa solicitante · Deudor = Empresa deudora.</span>
+    </div>
+    <div class="funnel-row">
+      <div class="card">
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 12px;color:var(--ink);">Comisiones del periodo</h3>
+        <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
+        <div class="mora-table-wrap" style="margin-top:12px;">
+          <table id="tbl-comisiones">
+            <thead>
+              <tr>
+                <th class="left">Concepto</th>
+                <th>Operaciones</th>
+                <th>Monto (CLP)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 8px;color:var(--ink);">Cartera · por cliente (cedente)</h3>
+        <div class="conc-meters" id="carteraClienteMeters"></div>
+        <div class="conc-summary" id="carteraClienteSummary" style="margin-top:10px;"></div>
+        <h3 style="font-family:Fraunces,serif;font-size:16px;margin:18px 0 8px;color:var(--ink);">Cartera · por deudor</h3>
+        <div class="conc-meters" id="carteraDeudorMeters"></div>
+        <div class="conc-summary" id="carteraDeudorSummary" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- SECTION 4: MORA / AGING -->
   <section class="block" id="secMora">
     <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Aging de mora</h2></div>
@@ -2275,10 +2333,8 @@ function renderMora(){
     m3:      { key:'m3', label:'Mora 60+ días', cls:'m3', ops:0, monto:0, comps:{} }
   };
 
-  masterRowsCache.forEach(r => {
-    const e = r[colExec] || '';
-    if(currentExec !== 'ALL' && e !== currentExec) return;
-
+  const moraSource = masterRowsFiltered();
+  moraSource.forEach(r => {
     let dias = parseInt(String(r[colDias] || '').replace(/[^\d\-]/g,''), 10);
     if(isNaN(dias)) return;
 
@@ -2701,11 +2757,238 @@ function downloadFacturasDetalleCSV(){
   downloadCSV('facturas_detalle_' + filterSuffix + '.csv', window._factDetalleExport);
 }
 
+
+/* ---- Filtro de periodo (día / semana / días móviles) ---- */
+let dateMode = 'all';
+let dateRange = { from: null, to: null }; // Date objects inclusive, local
+
+function parseFullDate(val){
+  if(val == null || val === '') return null;
+  const s = String(val).trim();
+  let m;
+  // M/D/YYYY or MM/DD/YYYY
+  if((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))){
+    const mo = parseInt(m[1],10), d = parseInt(m[2],10), y = parseInt(m[3],10);
+    // if first > 12 treat as D/M/YYYY
+    if(mo > 12) return new Date(y, d - 1, mo);
+    return new Date(y, mo - 1, d);
+  }
+  // YYYY-MM-DD
+  if((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))){
+    return new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+  }
+  // D-M-YYYY or DD-MM-YYYY
+  if((m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/))){
+    return new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10));
+  }
+  const t = Date.parse(s);
+  if(!isNaN(t)) return new Date(t);
+  return null;
+}
+
+function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
+
+function applyDateMode(){
+  const mode = document.getElementById('dateMode')?.value || 'all';
+  dateMode = mode;
+  const dayEl = document.getElementById('dateDay');
+  const weekEl = document.getElementById('dateWeek');
+  const fromEl = document.getElementById('dateFrom');
+  const toEl = document.getElementById('dateTo');
+  const show = (ids, on) => ids.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.hidden = !on;
+  });
+  show(['dateDay','lblDateDay'], mode === 'day');
+  show(['dateWeek','lblDateWeek'], mode === 'week');
+  show(['dateFrom','lblDateFrom','dateTo','lblDateTo'], mode === 'custom');
+
+  const today = startOfDay(new Date());
+  let from = null, to = null;
+
+  if(mode === 'all'){
+    from = to = null;
+  } else if(mode === 'day'){
+    const v = dayEl?.value;
+    const d = v ? parseFullDate(v) : today;
+    from = startOfDay(d); to = endOfDay(d);
+  } else if(mode === 'week'){
+    const v = weekEl?.value;
+    let d = v ? parseFullDate(v) : today;
+    // monday of that week
+    const day = d.getDay(); // 0 sun
+    const diff = (day === 0 ? -6 : 1 - day);
+    const mon = new Date(d); mon.setDate(d.getDate() + diff);
+    from = startOfDay(mon);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    to = endOfDay(sun);
+  } else if(mode === 'last7'){
+    to = endOfDay(today);
+    from = startOfDay(new Date(today)); from.setDate(from.getDate() - 6);
+  } else if(mode === 'last15'){
+    to = endOfDay(today);
+    from = startOfDay(new Date(today)); from.setDate(from.getDate() - 14);
+  } else if(mode === 'last30'){
+    to = endOfDay(today);
+    from = startOfDay(new Date(today)); from.setDate(from.getDate() - 29);
+  } else if(mode === 'custom'){
+    from = fromEl?.value ? startOfDay(parseFullDate(fromEl.value)) : null;
+    to = toEl?.value ? endOfDay(parseFullDate(toEl.value)) : null;
+  }
+  dateRange = { from, to };
+  const tag = document.getElementById('dateFilterTag');
+  if(tag){
+    if(!from && !to) tag.textContent = 'Periodo: todo';
+    else {
+      const fmt = d => d ? d.toLocaleDateString('es-CL') : '…';
+      tag.textContent = 'Periodo: ' + fmt(from) + ' → ' + fmt(to);
+    }
+  }
+}
+
+function masterRowsInPeriod(){
+  if(!masterRowsCache) return [];
+  if(!dateRange.from && !dateRange.to) return masterRowsCache.slice();
+  const sample = masterRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
+  return masterRowsCache.filter(r => {
+    const d = parseFullDate(r[colFecha]);
+    if(!d) return false;
+    if(dateRange.from && d < dateRange.from) return false;
+    if(dateRange.to && d > dateRange.to) return false;
+    return true;
+  });
+}
+
+function masterRowsFiltered(){
+  let rows = masterRowsInPeriod();
+  if(currentExec === 'ALL') return rows;
+  const sample = rows[0] || masterRowsCache[0] || {};
+  const keys = Object.keys(sample);
+  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k));
+  return rows.filter(r => (r[colExec] || '') === currentExec);
+}
+
+function renderComisiones(){
+  const tiles = document.getElementById('comisionTiles');
+  const tbody = document.querySelector('#tbl-comisiones tbody');
+  const pill = document.getElementById('ctxComisionesPill');
+  if(!tiles || !tbody) return;
+
+  const rows = masterRowsFiltered();
+  if(!rows.length){
+    tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">Sin operaciones en el periodo / filtro.</p>';
+    tbody.innerHTML = '';
+    if(pill) pill.textContent = 'Sin datos';
+    return;
+  }
+
+  const sample = rows[0];
+  const keys = Object.keys(sample);
+  const colRC = keys.find(k => /\(35\)/.test(k) || /^comisi[oó]n\s*rc$/i.test(k.replace(/^\(\d+\)/,''))) || keys.find(k => /comisi[oó]n\s*rc/i.test(k));
+  const colGastoLegal = keys.find(k => /\(34\)/.test(k) || /gasto\s*legal.*comisi/i.test(k));
+  const colGastoOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
+  const colGastoDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
+
+  let rc = 0, legal = 0, op = 0, dealer = 0, n = 0;
+  rows.forEach(r => {
+    n += 1;
+    if(colRC) rc += toNum(r[colRC]);
+    if(colGastoLegal) legal += toNum(r[colGastoLegal]);
+    if(colGastoOp) op += toNum(r[colGastoOp]);
+    if(colGastoDealer) dealer += toNum(r[colGastoDealer]);
+  });
+  const total = rc + legal + op + dealer;
+
+  if(pill){
+    const fl = currentExec === 'ALL' ? 'Todos' : currentExec;
+    pill.textContent = fl + ' · ' + n + ' ops · comisiones ' + fmtCLP(total);
+  }
+
+  tiles.innerHTML = `
+    <div class="mora-tile vigente"><div class="mt-label">Comisión RC</div><div class="mt-monto">${fmtCLP(rc)}</div><div class="mt-meta">${n} ops</div></div>
+    <div class="mora-tile m015"><div class="mt-label">Total comisiones + gastos</div><div class="mt-monto">${fmtCLP(total)}</div><div class="mt-meta">RC + legal + op + dealer</div></div>
+  `;
+  tbody.innerHTML = `
+    <tr><td class="left">Comisión RC (35)</td><td>${fmtInt(n)}</td><td>${fmtCLP(rc)}</td></tr>
+    <tr><td class="left">Gasto legal Comisión RC</td><td>${fmtInt(n)}</td><td>${fmtCLP(legal)}</td></tr>
+    <tr><td class="left">Gasto operación (sin IVA)</td><td>${fmtInt(n)}</td><td>${fmtCLP(op)}</td></tr>
+    <tr><td class="left">Gasto operación dealer</td><td>${fmtInt(n)}</td><td>${fmtCLP(dealer)}</td></tr>
+    <tr class="total-row"><td class="left">Total</td><td>${fmtInt(n)}</td><td>${fmtCLP(total)}</td></tr>
+  `;
+}
+
+function renderCarteraConcentration(){
+  renderCarteraSide('cliente');
+  renderCarteraSide('deudor');
+}
+
+function renderCarteraSide(kind){
+  const meters = document.getElementById(kind === 'cliente' ? 'carteraClienteMeters' : 'carteraDeudorMeters');
+  const summary = document.getElementById(kind === 'cliente' ? 'carteraClienteSummary' : 'carteraDeudorSummary');
+  if(!meters) return;
+  const rows = masterRowsFiltered();
+  if(!rows.length){
+    meters.innerHTML = '<p class="insight-empty">Sin datos de cartera en el periodo.</p>';
+    if(summary) summary.innerHTML = '';
+    return;
+  }
+  const sample = rows[0];
+  const keys = Object.keys(sample);
+  const colName = kind === 'cliente'
+    ? (keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante')
+    : (keys.find(k => /empresa\s*deudora/i.test(k)) || '(28)Empresa deudora');
+  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
+  const colAlt = keys.find(k => /\(43\)/.test(k) || /monto final adelantado/i.test(k));
+  const colGiro = keys.find(k => /\(46\)/.test(k) || /monto a giro/i.test(k));
+  const colVig = keys.find(k => /\(55\)/.test(k) || /monto vigente/i.test(k));
+
+  const by = {};
+  rows.forEach(r => {
+    const name = (r[colName] || 'Sin nombre').trim() || 'Sin nombre';
+    let m = colVig ? toNum(r[colVig]) : 0;
+    if(m === 0){
+      m = toNum(r[colMonto]);
+      if(m === 0 && colAlt) m = toNum(r[colAlt]);
+      if(m === 0 && colGiro) m = toNum(r[colGiro]);
+    }
+    by[name] = (by[name] || 0) + m;
+  });
+  const items = Object.keys(by).map(n => ({ nombre:n, total:by[n] })).filter(x => x.total > 0).sort((a,b)=>b.total-a.total);
+  const book = items.reduce((s,x)=>s+x.total,0);
+  if(!book){
+    meters.innerHTML = '<p class="insight-empty">Sin montos.</p>';
+    if(summary) summary.innerHTML = '';
+    return;
+  }
+  meters.innerHTML = items.slice(0,8).map(it => {
+    const pct = it.total / book * 100;
+    const cls = pct >= 25 ? 'danger' : (pct >= 15 ? 'warn' : '');
+    return `<div class="conc-row">
+      <div class="conc-top"><span class="name" title="${escapeHtml(it.nombre)}">${escapeHtml(it.nombre)}</span>
+      <span class="pct">${pct.toFixed(1).replace('.',',')}% · ${fmtCLP(it.total)}</span></div>
+      <div class="conc-track"><div class="conc-fill ${cls}" style="width:${Math.min(pct,100)}%"></div></div>
+    </div>`;
+  }).join('');
+  if(summary){
+    const t1 = items[0] ? items[0].total/book*100 : 0;
+    const t3 = items.slice(0,3).reduce((s,x)=>s+x.total,0)/book*100;
+    const t5 = items.slice(0,5).reduce((s,x)=>s+x.total,0)/book*100;
+    summary.innerHTML = `<div><div class="s-label">Top 1</div><div class="s-val">${t1.toFixed(1).replace('.',',')}%</div></div>
+      <div><div class="s-label">Top 3</div><div class="s-val">${t3.toFixed(1).replace('.',',')}%</div></div>
+      <div><div class="s-label">Top 5</div><div class="s-val">${t5.toFixed(1).replace('.',',')}%</div></div>`;
+  }
+}
+
 function renderAll(){
   if(!DATA) return;
   renderKpis();
   updateContextBars();
   renderIntel();
+  renderComisiones();
+  renderCarteraConcentration();
   renderMora();
   renderCesion();
   renderResumen();
@@ -2814,6 +3097,18 @@ if(btnDownloadMora) btnDownloadMora.addEventListener('click', downloadMoraCSV);
 
 const btnDownloadDetalleFact = document.getElementById('btnDownloadDetalleFact');
 if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', downloadFacturasDetalleCSV);
+
+
+const dateModeEl = document.getElementById('dateMode');
+if(dateModeEl){
+  const refreshDates = () => { applyDateMode(); if(DATA) renderAll(); };
+  dateModeEl.addEventListener('change', refreshDates);
+  ['dateDay','dateWeek','dateFrom','dateTo'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', refreshDates);
+  });
+  applyDateMode();
+}
 
 document.getElementById('btnLogin').addEventListener('click', attemptLogin);
 document.getElementById('btnLogout').addEventListener('click', logout);
