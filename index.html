@@ -1486,6 +1486,7 @@ function showApp(){
 
   // Restringir filtro de ejecutivo
   applyRoleToFilters();
+  applyRoleToTasksUI();
   loadFromCSV();
 }
 
@@ -3732,13 +3733,27 @@ function saveTasks(){
   try{ localStorage.setItem(TASKS_KEY, JSON.stringify(TASKS)); }catch(e){}
 }
 
+function taskVisibleForSession(t){
+  // Gerencia ve todas. Ejecutivo solo las asignadas a su ejecutivoKey
+  // (o sin ejecutivo = visibles para todos / gerencia; ejecutivos no ven las de otros).
+  if(!SESSION) return true;
+  if(isGerente()) return true;
+  if(isEjecutivo() && SESSION.ejecutivoKey){
+    const ex = String(t.ejecutivo || '').trim();
+    if(!ex) return false; // sin asignar: solo gerencia
+    return normalizeName(ex) === normalizeName(SESSION.ejecutivoKey)
+        || normalizeName(ex) === normalizeName(SESSION.nombre);
+  }
+  return true;
+}
+
 function renderTasks(){
   const list = document.getElementById('taskList');
   if(!list) return;
   const est = document.getElementById('taskFilterEstado')?.value || 'ALL';
   const prio = document.getElementById('taskFilterPrio')?.value || 'ALL';
 
-  let rows = TASKS.slice();
+  let rows = TASKS.filter(taskVisibleForSession);
   if(est === 'pendiente') rows = rows.filter(t => t.estado !== 'hecha');
   if(est === 'hecha') rows = rows.filter(t => t.estado === 'hecha');
   if(prio !== 'ALL') rows = rows.filter(t => (t.prioridad || 'media') === prio);
@@ -3755,7 +3770,9 @@ function renderTasks(){
   });
 
   if(!rows.length){
-    list.innerHTML = '<li class="task-empty">No hay tareas con este filtro. Agrega una arriba o importa un CSV.</li>';
+    list.innerHTML = '<li class="task-empty">' + (isEjecutivo()
+      ? 'No tienes tareas asignadas con este filtro. Las que agregues quedarán a tu nombre.'
+      : 'No hay tareas con este filtro. Agrega una arriba o importa un CSV.') + '</li>';
     return;
   }
 
@@ -3791,12 +3808,17 @@ function addTaskFromForm(){
   if(!tarea){ textEl?.focus(); return; }
   const now = new Date();
   const creada = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  let ejecutivoVal = (execEl?.value || '').trim();
+  // Si entra un ejecutivo, la tarea siempre queda a su nombre (no puede crear para otro)
+  if(isEjecutivo() && SESSION && SESSION.ejecutivoKey){
+    ejecutivoVal = SESSION.ejecutivoKey;
+  }
   TASKS.push({
     id: taskUid(),
     estado: 'pendiente',
     prioridad: prioEl?.value || 'media',
     tarea,
-    ejecutivo: (execEl?.value || '').trim(),
+    ejecutivo: ejecutivoVal,
     fecha: (fechaEl?.value || '').trim(),
     creada
   });
@@ -3840,7 +3862,7 @@ function onTaskListChange(e){
 function exportTasksCSV(){
   const header = ['id','estado','prioridad','tarea','ejecutivo','fecha','creada'];
   const rows = [header];
-  TASKS.forEach(t => {
+  TASKS.filter(taskVisibleForSession).forEach(t => {
     rows.push([
       t.id || '',
       t.estado || 'pendiente',
@@ -3904,8 +3926,23 @@ function importTasksFromFile(file){
       const parsed = parseTasksCSV(reader.result);
       if(!parsed.length){ alert('No se encontraron tareas en el archivo.'); return; }
       const mode = confirm('¿Reemplazar todas las tareas actuales por las del CSV?\n\nAceptar = reemplazar\nCancelar = agregar al final (sin borrar las actuales)');
-      if(mode) TASKS = parsed;
-      else {
+      // Ejecutivo: las tareas importadas quedan a su nombre
+      if(isEjecutivo() && SESSION && SESSION.ejecutivoKey){
+        parsed.forEach(t => { t.ejecutivo = SESSION.ejecutivoKey; });
+      }
+      if(mode){
+        if(isEjecutivo() && SESSION && SESSION.ejecutivoKey){
+          // no borra las de otros ejecutivos (siguen en storage para gerencia)
+          const mine = normalizeName(SESSION.ejecutivoKey);
+          const nombre = normalizeName(SESSION.nombre);
+          TASKS = TASKS.filter(t => {
+            const ex = normalizeName(t.ejecutivo || '');
+            return ex && ex !== mine && ex !== nombre;
+          }).concat(parsed);
+        } else {
+          TASKS = parsed;
+        }
+      } else {
         const ids = new Set(TASKS.map(t => t.id));
         parsed.forEach(t => {
           if(ids.has(t.id)) t.id = taskUid();
@@ -3931,9 +3968,37 @@ function clearDoneTasks(){
   renderTasks();
 }
 
+
+function applyRoleToTasksUI(){
+  const execEl = document.getElementById('taskNewExec');
+  const desc = document.querySelector('#secTareas .sec-desc');
+  if(isEjecutivo() && SESSION && SESSION.ejecutivoKey){
+    if(execEl){
+      execEl.value = SESSION.ejecutivoKey;
+      execEl.readOnly = true;
+      execEl.title = 'Tus tareas quedan a tu nombre';
+      execEl.style.opacity = '0.75';
+    }
+    if(desc){
+      desc.textContent = 'Aquí ves solo tus tareas (asignadas a ' + SESSION.ejecutivoKey + '). Puedes agregar, editar o marcar las tuyas. Gerencia ve la lista completa de todos los ejecutivos.';
+    }
+  } else {
+    if(execEl){
+      execEl.readOnly = false;
+      execEl.title = '';
+      execEl.style.opacity = '';
+      execEl.placeholder = 'Ejecutivo (opcional)';
+    }
+    if(desc){
+      desc.innerHTML = 'Anota pendientes del equipo. Gerencia ve todas las tareas; cada ejecutivo solo las suyas. Se guardan en este navegador y puedes importar o exportar un CSV con el formato de <code>tareas.csv</code>.';
+    }
+  }
+  renderTasks();
+}
+
 function wireTasksUI(){
   loadTasks();
-  renderTasks();
+  applyRoleToTasksUI();
   const add = document.getElementById('btnTaskAdd');
   if(add) add.addEventListener('click', addTaskFromForm);
   const textEl = document.getElementById('taskNewText');
