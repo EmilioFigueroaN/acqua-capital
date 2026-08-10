@@ -1,0 +1,5 @@
+id,estado,prioridad,tarea,ejecutivo,fecha,creada
+t001,pendiente,alta,Revisar mora de clientes sobre 25% de concentración,Viviana San Martín,2026-08-15,2026-08-10
+t002,pendiente,media,Cargar facturas nuevas de la semana,Carmen Serrano,2026-08-12,2026-08-10
+t003,hecha,baja,Actualizar users.csv con nuevo ejecutivo,,2026-08-08,2026-08-01
+t004,pendiente,alta,Seguimiento deudor EVERTEC CHILE SPA,Viviana San Martín,2026-08-14,2026-08-10
