@@ -1345,7 +1345,7 @@ select#execFilter:focus-visible{
   <!-- TAREAS -->
   <section class="block" id="secTareas">
     <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Lista de tareas</h2></div>
-    <p class="sec-desc">Anota pendientes del equipo. Puedes marcar, editar o borrar en pantalla. Se guardan en este navegador y también puedes importar o exportar un CSV con el formato de <code>tareas.csv</code>.</p>
+    <p class="sec-desc">Las tareas se leen del archivo <code>tareas.csv</code> (misma carpeta que el dashboard). Gerencia puede agregar en pantalla o editar el CSV; cada ejecutivo solo ve las asignadas a su nombre.</p>
     <div class="card">
       <div class="task-filters">
         <label for="taskFilterEstado">Ver</label>
@@ -1486,7 +1486,7 @@ function showApp(){
 
   // Restringir filtro de ejecutivo
   applyRoleToFilters();
-  applyRoleToTasksUI();
+  reloadTasksAndRender();
   loadFromCSV();
 }
 
@@ -3718,31 +3718,18 @@ function taskUid(){
   return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-function loadTasks(){
-  try{
-    const raw = localStorage.getItem(TASKS_KEY);
-    if(raw){
-      const arr = JSON.parse(raw);
-      if(Array.isArray(arr)){ TASKS = arr; return; }
-    }
-  }catch(e){}
-  TASKS = [];
-}
-
-function saveTasks(){
-  try{ localStorage.setItem(TASKS_KEY, JSON.stringify(TASKS)); }catch(e){}
 }
 
 function taskVisibleForSession(t){
-  // Gerencia ve todas. Ejecutivo solo las asignadas a su ejecutivoKey
-  // (o sin ejecutivo = visibles para todos / gerencia; ejecutivos no ven las de otros).
+  // Gerencia ve todas. Ejecutivo solo las asignadas a su nombre / ejecutivoKey.
   if(!SESSION) return true;
   if(isGerente()) return true;
-  if(isEjecutivo() && SESSION.ejecutivoKey){
-    const ex = String(t.ejecutivo || '').trim();
-    if(!ex) return false; // sin asignar: solo gerencia
-    return normalizeName(ex) === normalizeName(SESSION.ejecutivoKey)
-        || normalizeName(ex) === normalizeName(SESSION.nombre);
+  if(isEjecutivo()){
+    const ex = normalizeName(t.ejecutivo || '');
+    if(!ex) return false;
+    const key = normalizeName(SESSION.ejecutivoKey || '');
+    const nom = normalizeName(SESSION.nombre || '');
+    return (key && ex === key) || (nom && ex === nom);
   }
   return true;
 }
@@ -3771,7 +3758,7 @@ function renderTasks(){
 
   if(!rows.length){
     list.innerHTML = '<li class="task-empty">' + (isEjecutivo()
-      ? 'No tienes tareas asignadas con este filtro. Las que agregues quedarán a tu nombre.'
+      ? 'No tienes tareas asignadas. Cuando gerencia te asigne algo en tareas.csv (o desde esta pantalla), aparecerá aquí.'
       : 'No hay tareas con este filtro. Agrega una arriba o importa un CSV.') + '</li>';
     return;
   }
@@ -3789,11 +3776,11 @@ function renderTasks(){
     return `<li class="task-item ${done ? 'done' : ''}" data-id="${escapeHtml(t.id)}">
       <input type="checkbox" ${done ? 'checked' : ''} aria-label="Marcar hecha" data-act="toggle">
       <div>
-        <input class="task-title" type="text" value="${escapeHtml(t.tarea || '')}" data-act="edit" maxlength="300" aria-label="Texto de la tarea">
+        <input class="task-title" type="text" value="${escapeHtml(t.tarea || '')}" data-act="edit" maxlength="300" aria-label="Texto de la tarea" ${isEjecutivo() ? 'readonly' : ''}>
         <div class="task-meta">${meta.join('')}</div>
       </div>
       <div class="task-actions">
-        <button type="button" data-act="delete" class="danger" title="Eliminar">Eliminar</button>
+        ${isEjecutivo() ? '' : '<button type="button" data-act="delete" class="danger" title="Eliminar">Eliminar</button>'}
       </div>
     </li>`;
   }).join('');
@@ -3970,35 +3957,109 @@ function clearDoneTasks(){
 
 
 function applyRoleToTasksUI(){
+  const toolbar = document.querySelector('#secTareas .task-toolbar');
   const execEl = document.getElementById('taskNewExec');
   const desc = document.querySelector('#secTareas .sec-desc');
-  if(isEjecutivo() && SESSION && SESSION.ejecutivoKey){
-    if(execEl){
-      execEl.value = SESSION.ejecutivoKey;
-      execEl.readOnly = true;
-      execEl.title = 'Tus tareas quedan a tu nombre';
-      execEl.style.opacity = '0.75';
-    }
+  const btnAdd = document.getElementById('btnTaskAdd');
+  const btnImp = document.getElementById('btnTaskImport');
+  const btnClr = document.getElementById('btnTaskClearDone');
+  const btnExp = document.getElementById('btnTaskExport');
+
+  if(isEjecutivo() && SESSION){
+    // Ejecutivo: solo ve y marca las suyas — no puede agregar ni importar
+    if(toolbar) toolbar.style.display = 'none';
+    if(btnAdd) btnAdd.style.display = 'none';
+    if(btnImp) btnImp.style.display = 'none';
+    if(btnClr) btnClr.style.display = 'none';
+    if(btnExp) btnExp.style.display = '';
     if(desc){
-      desc.textContent = 'Aquí ves solo tus tareas (asignadas a ' + SESSION.ejecutivoKey + '). Puedes agregar, editar o marcar las tuyas. Gerencia ve la lista completa de todos los ejecutivos.';
+      const quien = SESSION.ejecutivoKey || SESSION.nombre;
+      desc.textContent = 'Solo ves las tareas asignadas a ' + quien + '. Puedes marcarlas como hechas. Solo gerencia puede crear o asignar tareas nuevas.';
     }
   } else {
+    // Gerencia (o sin sesión): puede gestionar todo
+    if(toolbar) toolbar.style.display = '';
+    if(btnAdd) btnAdd.style.display = '';
+    if(btnImp) btnImp.style.display = '';
+    if(btnClr) btnClr.style.display = '';
     if(execEl){
       execEl.readOnly = false;
-      execEl.title = '';
       execEl.style.opacity = '';
-      execEl.placeholder = 'Ejecutivo (opcional)';
+      execEl.placeholder = 'Ejecutivo (ej. Viviana San Martín)';
     }
     if(desc){
-      desc.innerHTML = 'Anota pendientes del equipo. Gerencia ve todas las tareas; cada ejecutivo solo las suyas. Se guardan en este navegador y puedes importar o exportar un CSV con el formato de <code>tareas.csv</code>.';
+      desc.innerHTML = 'Gerencia crea y asigna tareas a cada ejecutivo. Cada ejecutivo, al entrar, solo ve las suyas. Formato CSV: <code>tareas.csv</code>.';
     }
   }
   renderTasks();
 }
 
-function wireTasksUI(){
-  loadTasks();
+
+const TASKS_STATUS_KEY = 'acqua_factoring_tareas_status_v1'; // solo estado hecha/pendiente por id
+
+function loadStatusOverrides(){
+  try{
+    const raw = localStorage.getItem(TASKS_STATUS_KEY);
+    if(raw){
+      const o = JSON.parse(raw);
+      if(o && typeof o === 'object') return o;
+    }
+  }catch(e){}
+  return {};
+}
+
+function saveStatusOverrides(map){
+  try{ localStorage.setItem(TASKS_STATUS_KEY, JSON.stringify(map || {})); }catch(e){}
+}
+
+function applyStatusOverrides(tasks){
+  const map = loadStatusOverrides();
+  tasks.forEach(t => {
+    if(t.id && map[t.id]) t.estado = map[t.id];
+  });
+  return tasks;
+}
+
+function setTaskStatus(id, estado){
+  const map = loadStatusOverrides();
+  map[id] = estado;
+  saveStatusOverrides(map);
+}
+
+/** Lee siempre tareas.csv del servidor/carpeta del dashboard. */
+async function loadTasksFromCSVFile(){
+  try{
+    const res = await fetch('tareas.csv?t=' + Date.now());
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const parsed = parseTasksCSV(text);
+    TASKS = applyStatusOverrides(parsed);
+    return true;
+  }catch(e){
+    console.warn('No se pudo leer tareas.csv', e);
+    TASKS = applyStatusOverrides(TASKS || []);
+    return false;
+  }
+}
+
+function saveTasks(){
+  // Persistimos solo el estado hecha/pendiente (el listado vive en tareas.csv)
+  const map = loadStatusOverrides();
+  TASKS.forEach(t => {
+    if(t.id) map[t.id] = t.estado || 'pendiente';
+  });
+  saveStatusOverrides(map);
+}
+
+async function reloadTasksAndRender(){
+  await loadTasksFromCSVFile();
   applyRoleToTasksUI();
+}
+
+function wireTasksUI(){
+  // Cargar desde archivo al inicio
+  loadTasksFromCSVFile().then(() => applyRoleToTasksUI()).catch(() => applyRoleToTasksUI());
+
   const add = document.getElementById('btnTaskAdd');
   if(add) add.addEventListener('click', addTaskFromForm);
   const textEl = document.getElementById('taskNewText');
@@ -4025,6 +4086,29 @@ function wireTasksUI(){
   }
   const clr = document.getElementById('btnTaskClearDone');
   if(clr) clr.addEventListener('click', clearDoneTasks);
+
+  let btnReload = document.getElementById('btnTaskReloadCsv');
+  if(!btnReload){
+    const row = document.querySelector('#secTareas .chart-download-row');
+    if(row){
+      btnReload = document.createElement('button');
+      btnReload.type = 'button';
+      btnReload.id = 'btnTaskReloadCsv';
+      btnReload.className = 'btn-refresh';
+      btnReload.title = 'Volver a leer tareas.csv';
+      btnReload.textContent = '↻ Recargar desde tareas.csv';
+      row.insertBefore(btnReload, row.firstChild);
+    }
+  }
+  if(btnReload){
+    btnReload.addEventListener('click', async () => {
+      const ok = await loadTasksFromCSVFile();
+      applyRoleToTasksUI();
+      alert(ok
+        ? ('Tareas leídas desde tareas.csv: ' + TASKS.length)
+        : 'No se pudo leer tareas.csv. Déjalo en la misma carpeta que el HTML (junto a users.csv).');
+    });
+  }
 }
 
 
