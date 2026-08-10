@@ -918,6 +918,53 @@ select#execFilter:focus-visible{
   }
   .conc-exec-legend b{ color:var(--ink); font-weight:600; }
 
+  /* ---- Tareas ---- */
+  .task-toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+    margin-bottom:14px;
+  }
+  .task-toolbar input[type="text"],
+  .task-toolbar input[type="date"],
+  .task-toolbar select{
+    font-family:'Inter',sans-serif; font-size:13px;
+    padding:7px 11px; border-radius:8px; border:1.5px solid var(--line);
+    background:var(--paper); color:var(--ink);
+  }
+  .task-toolbar input[type="text"]{ min-width:220px; flex:1; }
+  .task-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  .task-item{
+    display:grid; grid-template-columns:28px 1fr auto; gap:10px 12px;
+    align-items:start; padding:12px 14px; border-radius:12px;
+    border:1.5px solid var(--line); background:var(--paper);
+  }
+  .task-item.done{ opacity:0.72; background:var(--paper-2); }
+  .task-item.done .task-title{ text-decoration:line-through; color:var(--ink-soft); }
+  .task-item input[type="checkbox"]{ width:18px; height:18px; margin-top:2px; cursor:pointer; accent-color:var(--teal-deep); }
+  .task-title{
+    font-size:14px; font-weight:600; color:var(--ink); border:none; background:transparent;
+    width:100%; padding:0; font-family:inherit;
+  }
+  .task-title:focus{ outline:2px solid var(--gold); outline-offset:2px; border-radius:4px; }
+  .task-meta{ display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:6px; font-size:12px; color:var(--ink-soft); }
+  .task-meta .pill{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:2px 8px; border-radius:20px; background:#eef4f2; color:var(--teal-deep);
+    border:1px solid #cfe0d6; font-weight:500;
+  }
+  .task-meta .pill.prio-alta{ background:#fdecea; color:#9b2c2c; border-color:#f5c6c2; }
+  .task-meta .pill.prio-media{ background:#fbf3e0; color:#8f6a24; border-color:#ead9a8; }
+  .task-meta .pill.prio-baja{ background:#eef4f2; color:var(--teal-deep); border-color:#cfe0d6; }
+  .task-actions{ display:flex; gap:6px; align-items:center; }
+  .task-actions button{
+    font-size:12px; padding:5px 10px; border-radius:8px; border:1px solid var(--line);
+    background:var(--paper); cursor:pointer; color:var(--ink-soft); font-family:inherit;
+  }
+  .task-actions button:hover{ color:var(--ink); border-color:var(--ink-soft); }
+  .task-actions button.danger:hover{ color:#9b2c2c; border-color:#f5c6c2; }
+  .task-empty{ font-size:13.5px; color:#8a8471; padding:16px; text-align:center; }
+  .task-filters{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+  .task-filters label{ font-size:12px; color:var(--ink-soft); font-weight:600; }
+
 </style>
 </head>
 <body>
@@ -1291,6 +1338,49 @@ select#execFilter:focus-visible{
           </table>
         </div>
       </div>
+    </div>
+  </section>
+
+
+  <!-- TAREAS -->
+  <section class="block" id="secTareas">
+    <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Lista de tareas</h2></div>
+    <p class="sec-desc">Anota pendientes del equipo. Puedes marcar, editar o borrar en pantalla. Se guardan en este navegador y también puedes importar o exportar un CSV con el formato de <code>tareas.csv</code>.</p>
+    <div class="card">
+      <div class="task-filters">
+        <label for="taskFilterEstado">Ver</label>
+        <select id="taskFilterEstado" aria-label="Filtrar tareas por estado">
+          <option value="ALL">Todas</option>
+          <option value="pendiente">Solo pendientes</option>
+          <option value="hecha">Solo hechas</option>
+        </select>
+        <label for="taskFilterPrio">Prioridad</label>
+        <select id="taskFilterPrio" aria-label="Filtrar por prioridad">
+          <option value="ALL">Todas</option>
+          <option value="alta">Alta</option>
+          <option value="media">Media</option>
+          <option value="baja">Baja</option>
+        </select>
+      </div>
+      <div class="task-toolbar">
+        <input type="text" id="taskNewText" placeholder="Nueva tarea…" maxlength="300" aria-label="Texto de la nueva tarea">
+        <select id="taskNewPrio" aria-label="Prioridad">
+          <option value="media">Media</option>
+          <option value="alta">Alta</option>
+          <option value="baja">Baja</option>
+        </select>
+        <input type="text" id="taskNewExec" placeholder="Ejecutivo (opcional)" maxlength="80" aria-label="Ejecutivo">
+        <input type="date" id="taskNewFecha" aria-label="Fecha límite">
+        <button type="button" class="btn-refresh" id="btnTaskAdd">+ Agregar</button>
+      </div>
+      <ul class="task-list" id="taskList" aria-label="Tareas"></ul>
+      <div class="chart-download-row" style="margin-top:14px; gap:10px; flex-wrap:wrap;">
+        <button type="button" id="btnTaskExport" class="btn-refresh" title="Descargar tareas en CSV">⬇ Exportar tareas (CSV)</button>
+        <button type="button" id="btnTaskImport" class="btn-refresh" title="Cargar tareas desde un CSV">⬆ Importar CSV</button>
+        <input type="file" id="taskImportFile" accept=".csv,text/csv" hidden>
+        <button type="button" id="btnTaskClearDone" class="btn-refresh" title="Eliminar las tareas marcadas como hechas">Limpiar hechas</button>
+      </div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:12px 0 0;">Formato CSV: <code>id,estado,prioridad,tarea,ejecutivo,fecha,creada</code> — ver archivo de ejemplo <code>tareas.csv</code>.</p>
     </div>
   </section>
 
@@ -3618,6 +3708,261 @@ function renderCarteraSide(kind){
 }
 
 
+
+/* ===================== TAREAS (localStorage + CSV) ===================== */
+const TASKS_KEY = 'acqua_factoring_tareas_v1';
+let TASKS = [];
+
+function taskUid(){
+  return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function loadTasks(){
+  try{
+    const raw = localStorage.getItem(TASKS_KEY);
+    if(raw){
+      const arr = JSON.parse(raw);
+      if(Array.isArray(arr)){ TASKS = arr; return; }
+    }
+  }catch(e){}
+  TASKS = [];
+}
+
+function saveTasks(){
+  try{ localStorage.setItem(TASKS_KEY, JSON.stringify(TASKS)); }catch(e){}
+}
+
+function renderTasks(){
+  const list = document.getElementById('taskList');
+  if(!list) return;
+  const est = document.getElementById('taskFilterEstado')?.value || 'ALL';
+  const prio = document.getElementById('taskFilterPrio')?.value || 'ALL';
+
+  let rows = TASKS.slice();
+  if(est === 'pendiente') rows = rows.filter(t => t.estado !== 'hecha');
+  if(est === 'hecha') rows = rows.filter(t => t.estado === 'hecha');
+  if(prio !== 'ALL') rows = rows.filter(t => (t.prioridad || 'media') === prio);
+
+  // pendientes primero, luego por fecha, luego creación
+  rows.sort((a,b) => {
+    const da = a.estado === 'hecha' ? 1 : 0;
+    const db = b.estado === 'hecha' ? 1 : 0;
+    if(da !== db) return da - db;
+    const fa = a.fecha || '9999';
+    const fb = b.fecha || '9999';
+    if(fa !== fb) return fa < fb ? -1 : 1;
+    return (a.creada || '') < (b.creada || '') ? 1 : -1;
+  });
+
+  if(!rows.length){
+    list.innerHTML = '<li class="task-empty">No hay tareas con este filtro. Agrega una arriba o importa un CSV.</li>';
+    return;
+  }
+
+  list.innerHTML = rows.map(t => {
+    const done = t.estado === 'hecha';
+    const pr = t.prioridad || 'media';
+    const prLabel = pr === 'alta' ? 'Alta' : (pr === 'baja' ? 'Baja' : 'Media');
+    const exec = (t.ejecutivo || '').trim();
+    const fecha = (t.fecha || '').trim();
+    const meta = [];
+    meta.push(`<span class="pill prio-${pr}">${prLabel}</span>`);
+    if(exec) meta.push(`<span class="pill">${escapeHtml(exec)}</span>`);
+    if(fecha) meta.push(`<span class="pill">📅 ${escapeHtml(fecha)}</span>`);
+    return `<li class="task-item ${done ? 'done' : ''}" data-id="${escapeHtml(t.id)}">
+      <input type="checkbox" ${done ? 'checked' : ''} aria-label="Marcar hecha" data-act="toggle">
+      <div>
+        <input class="task-title" type="text" value="${escapeHtml(t.tarea || '')}" data-act="edit" maxlength="300" aria-label="Texto de la tarea">
+        <div class="task-meta">${meta.join('')}</div>
+      </div>
+      <div class="task-actions">
+        <button type="button" data-act="delete" class="danger" title="Eliminar">Eliminar</button>
+      </div>
+    </li>`;
+  }).join('');
+}
+
+function addTaskFromForm(){
+  const textEl = document.getElementById('taskNewText');
+  const prioEl = document.getElementById('taskNewPrio');
+  const execEl = document.getElementById('taskNewExec');
+  const fechaEl = document.getElementById('taskNewFecha');
+  const tarea = (textEl?.value || '').trim();
+  if(!tarea){ textEl?.focus(); return; }
+  const now = new Date();
+  const creada = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  TASKS.push({
+    id: taskUid(),
+    estado: 'pendiente',
+    prioridad: prioEl?.value || 'media',
+    tarea,
+    ejecutivo: (execEl?.value || '').trim(),
+    fecha: (fechaEl?.value || '').trim(),
+    creada
+  });
+  saveTasks();
+  if(textEl) textEl.value = '';
+  if(execEl) execEl.value = '';
+  if(fechaEl) fechaEl.value = '';
+  renderTasks();
+}
+
+function onTaskListClick(e){
+  const li = e.target.closest('.task-item');
+  if(!li) return;
+  const id = li.getAttribute('data-id');
+  const t = TASKS.find(x => x.id === id);
+  if(!t) return;
+  const act = e.target.getAttribute('data-act');
+  if(act === 'toggle' || (e.target.type === 'checkbox')){
+    t.estado = t.estado === 'hecha' ? 'pendiente' : 'hecha';
+    saveTasks(); renderTasks();
+  } else if(act === 'delete'){
+    if(!confirm('¿Eliminar esta tarea?')) return;
+    TASKS = TASKS.filter(x => x.id !== id);
+    saveTasks(); renderTasks();
+  }
+}
+
+function onTaskListChange(e){
+  if(e.target.getAttribute('data-act') !== 'edit') return;
+  const li = e.target.closest('.task-item');
+  if(!li) return;
+  const id = li.getAttribute('data-id');
+  const t = TASKS.find(x => x.id === id);
+  if(!t) return;
+  const v = e.target.value.trim();
+  if(!v){ e.target.value = t.tarea; return; }
+  t.tarea = v;
+  saveTasks();
+}
+
+function exportTasksCSV(){
+  const header = ['id','estado','prioridad','tarea','ejecutivo','fecha','creada'];
+  const rows = [header];
+  TASKS.forEach(t => {
+    rows.push([
+      t.id || '',
+      t.estado || 'pendiente',
+      t.prioridad || 'media',
+      t.tarea || '',
+      t.ejecutivo || '',
+      t.fecha || '',
+      t.creada || ''
+    ]);
+  });
+  downloadCSV('tareas.csv', rows);
+}
+
+function parseTasksCSV(text){
+  // Reuse simple CSV parse: split lines, handle quotes lightly
+  const lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim());
+  if(lines.length < 2) return [];
+  const split = (line) => {
+    const out = []; let cur = ''; let q = false;
+    for(let i=0;i<line.length;i++){
+      const c = line[i];
+      if(c === '"'){ if(q && line[i+1] === '"'){ cur += '"'; i++; } else q = !q; }
+      else if(c === ',' && !q){ out.push(cur); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out.map(s => s.trim());
+  };
+  const header = split(lines[0]).map(h => h.toLowerCase());
+  const idx = (name) => header.indexOf(name);
+  const iId = idx('id'), iEst = idx('estado'), iPrio = idx('prioridad');
+  const iTar = idx('tarea'), iExec = idx('ejecutivo'), iFec = idx('fecha'), iCre = idx('creada');
+  if(iTar < 0) throw new Error('El CSV debe tener columna "tarea"');
+  const out = [];
+  for(let i=1;i<lines.length;i++){
+    const cols = split(lines[i]);
+    const tarea = (cols[iTar] || '').trim();
+    if(!tarea) continue;
+    let estado = (iEst >= 0 ? cols[iEst] : 'pendiente') || 'pendiente';
+    estado = /^hech/i.test(estado) || /^done$/i.test(estado) || estado === '1' ? 'hecha' : 'pendiente';
+    let prioridad = (iPrio >= 0 ? cols[iPrio] : 'media') || 'media';
+    prioridad = prioridad.toLowerCase();
+    if(!['alta','media','baja'].includes(prioridad)) prioridad = 'media';
+    out.push({
+      id: (iId >= 0 && cols[iId]) ? cols[iId] : taskUid(),
+      estado,
+      prioridad,
+      tarea,
+      ejecutivo: iExec >= 0 ? (cols[iExec] || '').trim() : '',
+      fecha: iFec >= 0 ? (cols[iFec] || '').trim() : '',
+      creada: iCre >= 0 ? (cols[iCre] || '').trim() : ''
+    });
+  }
+  return out;
+}
+
+function importTasksFromFile(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const parsed = parseTasksCSV(reader.result);
+      if(!parsed.length){ alert('No se encontraron tareas en el archivo.'); return; }
+      const mode = confirm('¿Reemplazar todas las tareas actuales por las del CSV?\n\nAceptar = reemplazar\nCancelar = agregar al final (sin borrar las actuales)');
+      if(mode) TASKS = parsed;
+      else {
+        const ids = new Set(TASKS.map(t => t.id));
+        parsed.forEach(t => {
+          if(ids.has(t.id)) t.id = taskUid();
+          TASKS.push(t);
+        });
+      }
+      saveTasks();
+      renderTasks();
+      alert('Tareas importadas: ' + parsed.length);
+    }catch(err){
+      alert('Error al leer el CSV: ' + (err.message || err));
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function clearDoneTasks(){
+  const n = TASKS.filter(t => t.estado === 'hecha').length;
+  if(!n){ alert('No hay tareas hechas.'); return; }
+  if(!confirm('¿Eliminar ' + n + ' tarea(s) hecha(s)?')) return;
+  TASKS = TASKS.filter(t => t.estado !== 'hecha');
+  saveTasks();
+  renderTasks();
+}
+
+function wireTasksUI(){
+  loadTasks();
+  renderTasks();
+  const add = document.getElementById('btnTaskAdd');
+  if(add) add.addEventListener('click', addTaskFromForm);
+  const textEl = document.getElementById('taskNewText');
+  if(textEl) textEl.addEventListener('keydown', e => { if(e.key === 'Enter') addTaskFromForm(); });
+  const list = document.getElementById('taskList');
+  if(list){
+    list.addEventListener('click', onTaskListClick);
+    list.addEventListener('change', onTaskListChange);
+  }
+  ['taskFilterEstado','taskFilterPrio'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', renderTasks);
+  });
+  const exp = document.getElementById('btnTaskExport');
+  if(exp) exp.addEventListener('click', exportTasksCSV);
+  const imp = document.getElementById('btnTaskImport');
+  const file = document.getElementById('taskImportFile');
+  if(imp && file){
+    imp.addEventListener('click', () => file.click());
+    file.addEventListener('change', () => {
+      if(file.files && file.files[0]) importTasksFromFile(file.files[0]);
+      file.value = '';
+    });
+  }
+  const clr = document.getElementById('btnTaskClearDone');
+  if(clr) clr.addEventListener('click', clearDoneTasks);
+}
+
+
 function renderAll(){
   if(!DATA) return;
   renderKpis();
@@ -3797,6 +4142,7 @@ if(moraTramoFilter){
   moraTramoFilter.addEventListener('change', () => { if(DATA) renderMora(); });
 }
 
+wireTasksUI();
 document.getElementById('btnLogin').addEventListener('click', attemptLogin);
 document.getElementById('btnLogout').addEventListener('click', logout);
 document.getElementById('loginRut').addEventListener('keydown', e => { if(e.key === 'Enter') attemptLogin(); });
