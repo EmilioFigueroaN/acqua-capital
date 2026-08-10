@@ -2943,7 +2943,7 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Inventario de facturas:</b> ${fmtCLP(disp)} todavía disponibles para ceder (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas a una financiera. `
+      html: `<b>Oportunidades:</b> ${fmtCLP(disp)} todavía disponibles para ceder (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas a una financiera. `
         + (pDisp >= 60 ? 'Hay bastante stock pendiente de ceder.' : 'La mayor parte ya tiene financiera asignada.')
     });
   }
@@ -3985,7 +3985,7 @@ function applyRoleToTasksUI(){
     if(execEl){
       execEl.readOnly = false;
       execEl.style.opacity = '';
-      execEl.placeholder = 'Ejecutivo (ej. Viviana San Martín)';
+      execEl.placeholder = 'Ejecutivo (ej. Emilio Figueroa)';
     }
     if(desc){
       desc.innerHTML = 'Gerencia crea y asigna tareas a cada ejecutivo. Cada ejecutivo, al entrar, solo ve las suyas. Formato CSV: <code>tareas.csv</code>.';
