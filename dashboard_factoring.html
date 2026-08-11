@@ -979,7 +979,7 @@ select#execFilter:focus-visible{
     <div class="login-error" id="loginError" role="alert"></div>
     <div class="login-field">
       <label for="loginNombre">Nombre</label>
-      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Emilio Figueroa">
+      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Viviana San Martín">
     </div>
     <div class="login-field">
       <label for="loginRut">RUT</label>
@@ -1369,7 +1369,9 @@ select#execFilter:focus-visible{
           <option value="alta">Alta</option>
           <option value="baja">Baja</option>
         </select>
-        <input type="text" id="taskNewExec" placeholder="Ejecutivo (opcional)" maxlength="80" aria-label="Ejecutivo">
+        <select id="taskNewExec" aria-label="Asignar a ejecutivo">
+          <option value="">Sin asignar</option>
+        </select>
         <input type="date" id="taskNewFecha" aria-label="Fecha límite">
         <button type="button" class="btn-refresh" id="btnTaskAdd">+ Agregar</button>
       </div>
@@ -2943,7 +2945,7 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Oportunidades:</b> ${fmtCLP(disp)} todavía disponibles para ceder (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas a una financiera. `
+      html: `<b>Inventario de facturas:</b> ${fmtCLP(disp)} todavía disponibles para ceder (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas a una financiera. `
         + (pDisp >= 60 ? 'Hay bastante stock pendiente de ceder.' : 'La mayor parte ya tiene financiera asignada.')
     });
   }
@@ -3719,7 +3721,6 @@ function taskUid(){
 }
 
 
-
 function taskVisibleForSession(t){
   // Gerencia ve todas. Ejecutivo solo las asignadas a su nombre / ejecutivoKey.
   if(!SESSION) return true;
@@ -3956,7 +3957,31 @@ function clearDoneTasks(){
 }
 
 
+
+function fillTaskExecSelect(){
+  const sel = document.getElementById('taskNewExec');
+  if(!sel || sel.tagName !== 'SELECT') return;
+  const prev = sel.value;
+  const names = new Set();
+  if(DATA && Array.isArray(DATA.ejecutivos)){
+    DATA.ejecutivos.forEach(e => { if(e) names.add(String(e).trim()); });
+  }
+  if(typeof USERS !== 'undefined' && Array.isArray(USERS)){
+    USERS.forEach(u => {
+      if(u.rol === 'ejecutivo'){
+        const k = (u.ejecutivoKey || u.nombre || '').trim();
+        if(k) names.add(k);
+      }
+    });
+  }
+  const list = Array.from(names).filter(Boolean).sort((a,b) => a.localeCompare(b, 'es'));
+  sel.innerHTML = '<option value="">Sin asignar</option>' +
+    list.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
+  if(prev && list.indexOf(prev) !== -1) sel.value = prev;
+}
+
 function applyRoleToTasksUI(){
+  fillTaskExecSelect();
   const toolbar = document.querySelector('#secTareas .task-toolbar');
   const execEl = document.getElementById('taskNewExec');
   const desc = document.querySelector('#secTareas .sec-desc');
@@ -3983,9 +4008,8 @@ function applyRoleToTasksUI(){
     if(btnImp) btnImp.style.display = '';
     if(btnClr) btnClr.style.display = '';
     if(execEl){
-      execEl.readOnly = false;
+      execEl.disabled = false;
       execEl.style.opacity = '';
-      execEl.placeholder = 'Ejecutivo (ej. Emilio Figueroa)';
     }
     if(desc){
       desc.innerHTML = 'Gerencia crea y asigna tareas a cada ejecutivo. Cada ejecutivo, al entrar, solo ve las suyas. Formato CSV: <code>tareas.csv</code>.';
@@ -4114,6 +4138,7 @@ function wireTasksUI(){
 
 function renderAll(){
   if(!DATA) return;
+  fillTaskExecSelect();
   renderKpis();
   updateContextBars();
   renderIntel();
