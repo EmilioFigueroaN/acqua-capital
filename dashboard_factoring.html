@@ -1396,7 +1396,7 @@ select#execFilter:focus-visible{
    ejecutivoKey debe coincidir EXACTO con el nombre en los CSV.
    ========================================================== */
 // Usuarios se cargan desde users.csv (no hardcodear aquí)
-const CSV_USERS = 'users.csv';
+const CSV_USERS = 'https://docs.google.com/spreadsheets/d/1ZH_IxoT7Xrwp65MU_T9kkmTGMVMjSAvbQul-1qbXRuo/export?format=csv';
 let USERS = [];
 let usersLoaded = false;
 let usersLoadError = null;
@@ -1415,7 +1415,7 @@ async function loadUsers(){
   usersLoadError = null;
   try{
     const bust = '?t=' + Date.now();
-    const res = await fetch(CSV_USERS + bust);
+    const res = await fetch(csvUrl(CSV_USERS), { cache: 'no-store' });
     if(!res.ok) throw new Error('No se pudo leer ' + CSV_USERS + ' (HTTP ' + res.status + ')');
     const text = await res.text();
     const rows = parseCSV(text);
@@ -1466,6 +1466,7 @@ function loadSession(){
 
 function clearSession(){
   SESSION = null;
+  if(typeof stopAutoRefresh === 'function') stopAutoRefresh();
   try{ sessionStorage.removeItem(SESSION_KEY); }catch(e){}
 }
 
@@ -1489,7 +1490,9 @@ function showApp(){
   // Restringir filtro de ejecutivo
   applyRoleToFilters();
   reloadTasksAndRender();
-  loadFromCSV();
+  loadFromCSV().then(() => {
+    if(typeof startAutoRefresh === 'function') startAutoRefresh();
+  });
 }
 
 function showLogin(msg){
@@ -1563,8 +1566,16 @@ function logout(){
 
 'use strict';
 
-const CSV_MASTER   = 'reporte_factoring_master.csv';
-const CSV_FACTURAS = 'reporteFacturasNuevas.csv';
+const CSV_MASTER   = 'https://docs.google.com/spreadsheets/d/1KMe9OtGopZtLp6m_6nePmdjGQNf3gLsgRGJQJGhV2vI/export?format=csv';
+const CSV_FACTURAS = 'https://docs.google.com/spreadsheets/d/1S6qAvQwiLExVcqah4PDgK-jDUefCHcOEphS0kUOROwI/export?format=csv';
+const CSV_TAREAS   = 'https://docs.google.com/spreadsheets/d/1Dp00vNV4xwQhuJvMnohpiupu22hsWGXxcF-FVph2Lpo/export?format=csv';
+
+/** Añade cache-bust a URL local o de Google Sheets */
+function csvUrl(base){
+  if(!base) return base;
+  return base + (base.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+}
+
 
 /**
  * Escapa caracteres HTML especiales. Los valores de los CSV (nombres de
@@ -3720,7 +3731,6 @@ function taskUid(){
   return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-
 function taskVisibleForSession(t){
   // Gerencia ve todas. Ejecutivo solo las asignadas a su nombre / ejecutivoKey.
   if(!SESSION) return true;
@@ -4053,7 +4063,7 @@ function setTaskStatus(id, estado){
 /** Lee siempre tareas.csv del servidor/carpeta del dashboard. */
 async function loadTasksFromCSVFile(){
   try{
-    const res = await fetch('tareas.csv?t=' + Date.now());
+    const res = await fetch(csvUrl(CSV_TAREAS), { cache: 'no-store' });
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     const parsed = parseTasksCSV(text);
@@ -4120,7 +4130,7 @@ function wireTasksUI(){
       btnReload.id = 'btnTaskReloadCsv';
       btnReload.className = 'btn-refresh';
       btnReload.title = 'Volver a leer tareas.csv';
-      btnReload.textContent = '↻ Recargar desde tareas.csv';
+      btnReload.textContent = '↻ Recargar tareas (Sheets)';
       row.insertBefore(btnReload, row.firstChild);
     }
   }
@@ -4129,8 +4139,8 @@ function wireTasksUI(){
       const ok = await loadTasksFromCSVFile();
       applyRoleToTasksUI();
       alert(ok
-        ? ('Tareas leídas desde tareas.csv: ' + TASKS.length)
-        : 'No se pudo leer tareas.csv. Déjalo en la misma carpeta que el HTML (junto a users.csv).');
+        ? ('Tareas leídas desde Google Sheets: ' + TASKS.length)
+        : 'No se pudo leer la hoja de tareas en Google Sheets. Revisa que esté compartida como “Cualquier persona con el enlace”.');
     });
   }
 }
@@ -4194,13 +4204,12 @@ async function loadFromCSV(){
 
   try{
     // cache-bust para forzar lectura fresca al actualizar
-    const bust = '?t=' + Date.now();
     const [r1, r2] = await Promise.all([
-      fetch(CSV_MASTER + bust, { signal: controller.signal }),
-      fetch(CSV_FACTURAS + bust, { signal: controller.signal })
+      fetch(csvUrl(CSV_MASTER), { signal: controller.signal, cache: 'no-store' }),
+      fetch(csvUrl(CSV_FACTURAS), { signal: controller.signal, cache: 'no-store' })
     ]);
-    if(!r1.ok) throw new Error('No se pudo leer ' + CSV_MASTER + ' (HTTP ' + r1.status + '). Debe estar en la misma carpeta que el HTML y servirse por HTTP.');
-    if(!r2.ok) throw new Error('No se pudo leer ' + CSV_FACTURAS + ' (HTTP ' + r2.status + '). Debe estar en la misma carpeta que el HTML y servirse por HTTP.');
+    if(!r1.ok) throw new Error('No se pudo leer ' + CSV_MASTER + ' (HTTP ' + r1.status + '). Revisa el enlace de Google Sheets (compartido con cualquiera que tenga el link).');
+    if(!r2.ok) throw new Error('No se pudo leer ' + CSV_FACTURAS + ' (HTTP ' + r2.status + '). Revisa el enlace de Google Sheets (compartido con cualquiera que tenga el link).');
 
     const [t1, t2] = await Promise.all([r1.text(), r2.text()]);
     const masterRows  = parseCSV(t1);
@@ -4217,6 +4226,13 @@ async function loadFromCSV(){
     renderHeroMeta();
     setupFilter();
     renderAll(); // ← actualiza las 3 tablas + gráficos
+
+    // Actualiza huellas para el auto-refresh
+    try{
+      csvFingerprints.master = simpleHash(t1);
+      csvFingerprints.facturas = simpleHash(t2);
+      csvFingerprints._initialized = true;
+    }catch(e){}
 
     const now = new Date();
     const hh = String(now.getHours()).padStart(2,'0');
@@ -4252,6 +4268,113 @@ function rebuildFromCache(){
   setupFilter();
   renderAll();
 }
+
+
+/* ---- Auto-actualización cuando cambian los CSV ---- */
+const AUTO_REFRESH_MS = 30000; // cada 30 s
+let csvFingerprints = { master: '', facturas: '', tareas: '', users: '' };
+let autoRefreshTimer = null;
+let autoRefreshBusy = false;
+
+function simpleHash(str){
+  // hash rápido no criptográfico para detectar cambios de contenido
+  let h = 2166136261;
+  const s = String(str || '');
+  for(let i = 0; i < s.length; i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36) + ':' + s.length;
+}
+
+async function fetchTextNoCache(url){
+  const res = await fetch(csvUrl(url), { cache: 'no-store' });
+  if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
+  return res.text();
+}
+
+async function checkCsvUpdates(silent){
+  if(autoRefreshBusy) return;
+  if(!SESSION) return; // solo con sesión activa
+  autoRefreshBusy = true;
+  try{
+    const [tMaster, tFact, tTasks, tUsers] = await Promise.all([
+      fetchTextNoCache(CSV_MASTER).catch(() => null),
+      fetchTextNoCache(CSV_FACTURAS).catch(() => null),
+      fetchTextNoCache(CSV_TAREAS).catch(() => null),
+      fetchTextNoCache(CSV_USERS).catch(() => null)
+    ]);
+
+    let changedOps = false;
+    let changedTasks = false;
+    let changedUsers = false;
+
+    if(tMaster != null){
+      const h = simpleHash(tMaster);
+      if(csvFingerprints.master && csvFingerprints.master !== h) changedOps = true;
+      csvFingerprints.master = h;
+    }
+    if(tFact != null){
+      const h = simpleHash(tFact);
+      if(csvFingerprints.facturas && csvFingerprints.facturas !== h) changedOps = true;
+      csvFingerprints.facturas = h;
+    }
+    if(tTasks != null){
+      const h = simpleHash(tTasks);
+      if(csvFingerprints.tareas && csvFingerprints.tareas !== h) changedTasks = true;
+      csvFingerprints.tareas = h;
+    }
+    if(tUsers != null){
+      const h = simpleHash(tUsers);
+      if(csvFingerprints.users && csvFingerprints.users !== h) changedUsers = true;
+      csvFingerprints.users = h;
+    }
+
+    // Primera pasada: solo guarda huellas, no recarga
+    if(!csvFingerprints._initialized){
+      csvFingerprints._initialized = true;
+      return;
+    }
+
+    if(changedOps){
+      if(!silent) setStatus('Se detectó cambio en los CSV · actualizando…', '');
+      await loadFromCSV();
+      if(typeof reloadTasksAndRender === 'function') await reloadTasksAndRender();
+      setStatus('Datos actualizados automáticamente · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
+    } else if(changedTasks){
+      if(typeof loadTasksFromCSVFile === 'function'){
+        await loadTasksFromCSVFile();
+        if(typeof applyRoleToTasksUI === 'function') applyRoleToTasksUI();
+        setStatus('Tareas actualizadas desde tareas.csv · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
+      }
+    } else if(changedUsers){
+      if(typeof loadUsers === 'function') await loadUsers();
+      setStatus('Usuarios actualizados · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
+    }
+  } catch(e){
+    console.warn('Auto-refresh CSV:', e);
+  } finally {
+    autoRefreshBusy = false;
+  }
+}
+
+function startAutoRefresh(){
+  stopAutoRefresh();
+  // Primera huella en silencio
+  checkCsvUpdates(true);
+  autoRefreshTimer = setInterval(() => checkCsvUpdates(false), AUTO_REFRESH_MS);
+  document.addEventListener('visibilitychange', onVisibilityRefresh);
+}
+
+function stopAutoRefresh(){
+  if(autoRefreshTimer){ clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  document.removeEventListener('visibilitychange', onVisibilityRefresh);
+}
+
+function onVisibilityRefresh(){
+  if(document.visibilityState === 'visible') checkCsvUpdates(false);
+}
+
 
 document.getElementById('btnPrevYear').addEventListener('click', () => {
   selectedYear -= 1;
