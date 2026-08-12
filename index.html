@@ -4,33 +4,37 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Dashboard ejecutivo de operaciones de factoring: resumen por ejecutivo, desempeño del mes en curso y estado de facturas.">
-<meta name="theme-color" content="#004280">
+<meta name="theme-color" content="#0061a4">
 <meta name="robots" content="noindex, nofollow">
 <title>Dashboard de Factoring — Resumen Ejecutivo</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
   :root{
-    /* Paleta alineada a acqua.capital */
-    --ink:#1e1e2d;
-    --ink-soft:#4a5568;
-    --paper:#f6f8fb;
-    --paper-2:#e9eef4;
-    --line:#d5dee8;
-    --teal:#0061a4;
-    --teal-deep:#00325f;
-    --gold:#0080c8;
-    --gold-soft:#7ec8ea;
-    --celeste:#5eb8e8;
-    --celeste-soft:#d6eef9;
-    --rose:#c04545;
-    --white:#ffffff;
-    --acqua:#0080c8;
-    --acqua-deep:#004280;
+    /* === Paleta exacta acqua.capital === */
+    --aqua:#0080c8;
+    --blue:#0061a4;
     --navy:#004280;
     --navy-deep:#00325f;
-    --blue:#0061a4;
-    --focus-ring:#0080c8;
+    --ink:#1e1e2d;
+    --mist:#f6f8fb;
+    --cloud:#e9eef4;
+    /* aliases usados en el dashboard */
+    --ink-soft:#5a6b7d;
+    --paper:var(--mist);
+    --paper-2:var(--cloud);
+    --line:#d4dde8;
+    --teal:var(--blue);
+    --teal-deep:var(--navy-deep);
+    --gold:var(--aqua);
+    --gold-soft:#8ecae9;
+    --celeste:var(--aqua);
+    --celeste-soft:#e3f2fa;
+    --acqua:var(--aqua);
+    --acqua-deep:var(--navy);
+    --rose:#c04545;
+    --white:#ffffff;
+    --focus-ring:var(--aqua);
     --shadow: 0 4px 20px rgba(18,58,94,0.08);
     --shadow-lg: 0 12px 40px rgba(18,58,94,0.14);
     --radius: 14px;
@@ -42,8 +46,8 @@
   body{
     background:
       radial-gradient(1100px 600px at 78% 0%, rgba(43,166,224,0.10), transparent 60%),
-      radial-gradient(900px 400px at 5% 20%, rgba(0,97,164,0.06), transparent 55%),
-      var(--paper);
+      linear-gradient(90deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.12) 45%, rgba(255,255,255,0) 100%),
+      var(--mist);
     color:var(--ink);
     font-family:'Inter',sans-serif;
     font-size:15px;
@@ -57,7 +61,7 @@
   /* ---------- HEADER ---------- */
   .hero{
     background:
-      linear-gradient(135deg, rgba(31,111,178,0.88) 0%, rgba(18,58,94,0.90) 50%, rgba(13,44,71,0.93) 100%),
+      linear-gradient(135deg, rgba(31,111,178,0.92) 0%, rgba(18,58,94,0.92) 55%, rgba(13,44,71,0.95) 100%),
       url('fondo.jpg') center 40% / cover no-repeat;
     color:var(--white);
     padding:52px 28px 48px;
@@ -116,8 +120,8 @@
 
   /* ---------- GLOBAL FILTER BAR ---------- */
   .filterbar{
-    background:rgba(255,255,255,0.94);
-    border:1px solid rgba(213,222,232,0.95);
+    background:rgba(255,255,255,0.96);
+    border:1px solid var(--cloud);
     border-radius:16px;
     margin-top:-28px;
     position:relative; z-index:2;
@@ -178,26 +182,28 @@
   thead th{
     text-align:right; font-weight:600; color:var(--ink-soft);
     font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
-    padding:10px 12px; border-bottom:2px solid var(--ink);
-    white-space:nowrap;
+    padding:11px 12px; border-bottom:2px solid var(--navy);
+    white-space:nowrap; background:var(--cloud);
   }
   thead th:first-child, thead th.left{text-align:left;}
   thead tr.group-row th{
     border-bottom:1px solid var(--line); font-family:'IBM Plex Mono',monospace;
-    color:var(--teal-deep); background:linear-gradient(180deg, #f0ebe0 0%, var(--paper-2) 100%);
+    color:var(--navy); background:var(--cloud);
     font-size:11px; padding:9px 12px;
   }
-  tbody td{padding:9px 12px; text-align:right; border-bottom:1px solid #ece7d8; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  tbody td{padding:10px 12px; text-align:right; border-bottom:1px solid var(--cloud); font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--ink);}
   tbody td.left{text-align:left; font-weight:600; color:var(--ink);}
   tbody tr{ transition: background .12s ease; }
-  tbody tr:hover{background:#f7f4eb;}
-  tbody tr:nth-child(even):not(.total-row){ background: rgba(243,240,232,0.35); }
-  tbody tr:nth-child(even):not(.total-row):hover{ background:#f7f4eb; }
+  tbody tr:hover{background:rgba(0,128,200,0.06);}
+  tbody tr:nth-child(even):not(.total-row){ background: var(--mist); }
+  tbody tr:nth-child(even):not(.total-row):hover{ background:rgba(0,128,200,0.08); }
   tr.total-row td{
-    border-top:2px solid var(--ink); border-bottom:none;
-    font-weight:700; background:linear-gradient(180deg, #ebe6d9 0%, #e4dfd0 100%); color:var(--ink);
+    border-top:2px solid var(--navy); border-bottom:none;
+    font-weight:700;
+    background:var(--cloud);
+    color:var(--navy-deep);
   }
-  tr.accum-row td{font-weight:600; color:var(--teal-deep);}
+  tr.accum-row td{font-weight:600; color:var(--blue);}
   .muted-zero{color:#b7b0a0;}
   .badge-empty{
     display:inline-block; font-size:10.5px; font-family:'IBM Plex Mono',monospace;
@@ -220,7 +226,7 @@
   .bar-track{flex:1; background:var(--paper-2); border-radius:5px; height:22px; position:relative; overflow:hidden;}
   .bar-fill{height:100%; border-radius:5px; min-width:2px; transition:width .5s ease;}
   .bar-fill.teal{background:linear-gradient(90deg,var(--teal-deep),var(--teal));}
-  .bar-fill.gold{background:linear-gradient(90deg,#0061a4,var(--gold));}
+  .bar-fill.gold{background:linear-gradient(90deg,var(--blue),var(--aqua));}
   /* El valor va SIEMPRE fuera de la pista (nunca dentro de .bar-fill), así
      no queda recortado por el overflow:hidden del track cuando la barra
      es muy corta o el monto es $0. */
@@ -451,7 +457,7 @@ select#execFilter:focus-visible{
     transition:width .4s ease;
   }
   .conc-fill.warn{
-    background:linear-gradient(90deg, #5eb8e8, #0080c8);
+    background:linear-gradient(90deg, var(--aqua), var(--blue));
   }
   .conc-fill.danger{
     background:linear-gradient(90deg, #8a3a2c, var(--rose));
@@ -542,7 +548,7 @@ select#execFilter:focus-visible{
   }
   .insight-item:hover{
     border-color: #c9c0a8;
-    background: #f7f4eb;
+    background: #eef6fc;
   }
   @media (prefers-reduced-motion: reduce){
     *, *::before, *::after{
@@ -653,9 +659,9 @@ select#execFilter:focus-visible{
   @media (max-width:1100px){ .mora-grid{ grid-template-columns:repeat(3,1fr); } }
   @media (max-width:700px){ .mora-grid{ grid-template-columns:repeat(2,1fr); } }
   @media (max-width:480px){ .mora-grid{ grid-template-columns:1fr; } }
-  .mora-tile.m015::before{ background:var(--gold); }
+  .mora-tile.m015::before{ background:var(--celeste); }
   .mora-tile.m1530::before{ background:#c45c2a; }
-  .mora-fill.m015{ background:var(--gold); }
+  .mora-fill.m015{ background:var(--celeste); }
   .mora-fill.m1530{ background:#c45c2a; }
   .mora-pct-banner{
     display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px;
@@ -684,7 +690,7 @@ select#execFilter:focus-visible{
     content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
   }
   .mora-tile.vigente::before{ background:var(--teal); }
-  .mora-tile.m1::before{ background:var(--gold); }
+  .mora-tile.m1::before{ background:var(--aqua); }
   .mora-tile.m2::before{ background:#c45c2a; }
   .mora-tile.m3::before{ background:var(--rose); }
   .mora-tile .mt-label{
@@ -705,7 +711,7 @@ select#execFilter:focus-visible{
   }
   .mora-fill{ height:100%; border-radius:5px; }
   .mora-fill.vigente{ background:var(--teal); }
-  .mora-fill.m1{ background:var(--gold); }
+  .mora-fill.m1{ background:var(--aqua); }
   .mora-fill.m2{ background:#c45c2a; }
   .mora-fill.m3{ background:var(--rose); }
   .mora-table-wrap{ margin-top:8px; overflow:auto; max-height:280px; }
@@ -854,7 +860,7 @@ select#execFilter:focus-visible{
     box-shadow:0 0 0 1px rgba(18,24,38,0.08);
   }
   .urg-dot.crit{ background:#c0392b; box-shadow:0 0 0 3px rgba(192,57,43,0.18); }
-  .urg-dot.warn{ background:#5eb8e8; box-shadow:0 0 0 3px rgba(94,184,232,0.25); }
+  .urg-dot.warn{ background:var(--aqua); box-shadow:0 0 0 3px rgba(94,184,232,0.25); }
   .urg-dot.ok{ background:#0061a4; opacity:0.55; }
   .urg-dot.na{ background:#c5bfb0; opacity:0.5; }
   .urg-legend{
