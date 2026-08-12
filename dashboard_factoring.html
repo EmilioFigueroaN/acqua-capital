@@ -55,26 +55,28 @@
   /* ---------- HEADER ---------- */
   .hero{
     background:
-      linear-gradient(135deg, rgba(31,111,178,0.96) 0%, rgba(18,58,94,0.96) 55%, rgba(13,44,71,0.98) 100%);
+      linear-gradient(135deg, rgba(31,111,178,0.88) 0%, rgba(18,58,94,0.90) 50%, rgba(13,44,71,0.93) 100%),
+      url('fondo.jpg') center 40% / cover no-repeat;
     color:var(--white);
     padding:52px 28px 48px;
     position:relative;
     overflow:hidden;
     border-bottom: 1px solid rgba(126,200,234,0.15);
+    min-height: 280px;
   }
   .hero::before{
     content:"";
     position:absolute; inset:0;
     background:
-      radial-gradient(ellipse 80% 60% at 85% 15%, rgba(0,128,200,0.28), transparent 55%),
-      radial-gradient(ellipse 50% 40% at 10% 80%, rgba(0,97,164,0.18), transparent 50%);
+      linear-gradient(90deg, rgba(13,44,71,0.55) 0%, rgba(18,58,94,0.25) 45%, rgba(13,44,71,0.15) 100%),
+      radial-gradient(ellipse 80% 60% at 85% 15%, rgba(0,128,200,0.22), transparent 55%);
     pointer-events:none;
   }
   .hero::after{
     content:"";
     position:absolute; right:-80px; top:-80px;
     width:320px;height:320px;border-radius:50%;
-    background:radial-gradient(circle, rgba(126,200,234,0.20), transparent 68%);
+    background:radial-gradient(circle, rgba(126,200,234,0.18), transparent 68%);
     pointer-events:none;
   }
   .hero-inner{max-width:1180px;margin:0 auto;position:relative;z-index:1;}
