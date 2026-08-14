@@ -269,6 +269,24 @@
     color:var(--rose); background:#fdeaea; border-radius:5px; padding:1px 6px; margin-left:6px;
   }
 
+  /* ---------- METAS (mes en curso) ---------- */
+  .metric-cell{display:inline-flex; flex-direction:column; align-items:flex-end; line-height:1.25;}
+  .metric-value.below-goal{color:var(--rose); font-weight:700;}
+  .metric-value.below-goal::after{content:" ▼"; font-size:9px; vertical-align:middle;}
+  .goal-tag{
+    font-size:10px; font-weight:600; color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace; letter-spacing:.01em; margin-top:1px;
+  }
+  .goal-tag.goal-met{color:#2f8f5b;}
+  .mescurso-legend{
+    display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--ink-soft);
+    margin:10px 0 0;
+  }
+  .mescurso-legend .dot-below{
+    display:inline-block; width:9px; height:9px; border-radius:50%;
+    background:var(--rose);
+  }
+
   /* table scroll for section 2 executives */
   .table-scroll{max-height:360px; overflow-y:auto;}
 
@@ -1384,6 +1402,10 @@ select#execFilter:focus-visible{
       <div class="table-scroll">
         <table id="tbl-mescurso"></table>
       </div>
+      <div class="mescurso-legend" id="mescursoLegend" style="display:none;">
+        <span class="dot-below"></span>
+        <span>En rojo: por debajo de la meta del mes. Se muestra la meta bajo cada valor. Ejecutivos sin operaciones este mes no se comparan contra su meta.</span>
+      </div>
     </div>
     <div class="chart-grid">
       <div class="card chart-card">
@@ -1640,6 +1662,7 @@ function logout(){
 const CSV_MASTER   = 'https://docs.google.com/spreadsheets/d/1KMe9OtGopZtLp6m_6nePmdjGQNf3gLsgRGJQJGhV2vI/export?format=csv';
 const CSV_FACTURAS = 'https://docs.google.com/spreadsheets/d/1S6qAvQwiLExVcqah4PDgK-jDUefCHcOEphS0kUOROwI/export?format=csv';
 const CSV_TAREAS   = 'https://docs.google.com/spreadsheets/d/1Dp00vNV4xwQhuJvMnohpiupu22hsWGXxcF-FVph2Lpo/export?format=csv';
+const CSV_METAS    = 'https://docs.google.com/spreadsheets/d/1Ccq_1MIsV5MPsf5_3OA92g0IVnDg8LaE_jNfHR3FRVc/export?format=csv';
 
 /** Añade cache-bust a URL local o de Google Sheets */
 function csvUrl(base){
@@ -1685,6 +1708,31 @@ let kpiWeek = '';      // YYYY-MM-DD lunes de la semana a observar
 let kpiWeekBase = '';  // YYYY-MM-DD lunes de la semana base
 let masterRowsCache = [];
 let facturaRowsCache = [];
+let metasRowsCache = [];
+let METAS_BY_MONTH = {}; // { 'YYYY-MM': { 'Nombre ejecutivo' | 'TODOS': {clientes_activos, clientes_nuevos, operaciones, monto_fin, dif_precio} } }
+
+/**
+ * Construye el mapa de metas a partir de las filas del CSV de metas.
+ * Columnas esperadas: anio_mes, ejecutivo, meta_clientes_activos,
+ * meta_clientes_nuevos, meta_operaciones, meta_monto_anticipo, meta_dif_precio.
+ */
+function buildMetas(rows){
+  const map = {};
+  (rows || []).forEach(r => {
+    const ym = String(r['anio_mes'] || '').trim();
+    const exec = String(r['ejecutivo'] || '').trim();
+    if(!ym || !exec) return;
+    if(!map[ym]) map[ym] = {};
+    map[ym][exec] = {
+      clientes_activos: Number(r['meta_clientes_activos']) || 0,
+      clientes_nuevos:  Number(r['meta_clientes_nuevos']) || 0,
+      operaciones:      Number(r['meta_operaciones']) || 0,
+      monto_fin:        Number(r['meta_monto_anticipo']) || 0,
+      dif_precio:       Number(r['meta_dif_precio']) || 0
+    };
+  });
+  return map;
+}
 
 /* ===================== 1. LEER CSV ===================== */
 function splitCSVLine(line){
@@ -2124,7 +2172,7 @@ function renderResumen(){
 function renderMesCurso(){
   const m = DATA.generated_current_month;
   document.getElementById('mesCursoDesc').innerHTML =
-    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo: clientes activos (empresas distintas que operaron), clientes nuevos, operaciones, monto anticipado y diferencia de precio.';
+    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo: clientes activos (empresas distintas que operaron), clientes nuevos, operaciones, monto anticipado y diferencia de precio, contra la meta del mes de cada ejecutivo.';
 
   const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
   const rows = execs.map(e => {
@@ -2141,15 +2189,58 @@ function renderMesCurso(){
     totals.dif_precio += r.dif_precio || 0;
   });
 
+  const metasMes = METAS_BY_MONTH[m] || null;
+  const hayMetasMes = !!metasMes;
+
   let html = '<thead><tr><th class="left">Ejecutivo</th><th>Clientes activos</th><th>Clientes nuevos</th><th>Operaciones</th><th>Monto anticipo</th><th>Diferencia precio</th></tr></thead><tbody>';
   rows.forEach(r => {
-    html += `<tr><td class="left">${escapeHtml(r.exec)}</td><td>${fmtInt(r.clientes_activos || 0)}</td><td>${fmtInt(r.clientes_nuevos || 0)}</td><td>${fmtInt(r.operaciones || 0)}</td><td>${fmtCLP(r.monto_fin || 0)}</td><td>${fmtCLP(r.dif_precio || 0)}</td></tr>`;
+    const hasActivity = (r.clientes_activos||0) > 0 || (r.clientes_nuevos||0) > 0 || (r.operaciones||0) > 0 || (r.monto_fin||0) > 0 || (r.dif_precio||0) > 0;
+    const meta = metasMes ? metasMes[r.exec] : null;
+    html += `<tr><td class="left">${escapeHtml(r.exec)}</td>`
+      + `<td>${metaCellHtml(r.clientes_activos || 0, meta ? meta.clientes_activos : null, fmtInt, hasActivity)}</td>`
+      + `<td>${metaCellHtml(r.clientes_nuevos || 0, meta ? meta.clientes_nuevos : null, fmtInt, hasActivity)}</td>`
+      + `<td>${metaCellHtml(r.operaciones || 0, meta ? meta.operaciones : null, fmtInt, hasActivity)}</td>`
+      + `<td>${metaCellHtml(r.monto_fin || 0, meta ? meta.monto_fin : null, fmtCLP, hasActivity)}</td>`
+      + `<td>${metaCellHtml(r.dif_precio || 0, meta ? meta.dif_precio : null, fmtCLP, hasActivity)}</td></tr>`;
   });
-  html += `<tr class="total-row"><td class="left">Total general</td><td>${fmtInt(totals.clientes_activos)}</td><td>${fmtInt(totals.clientes_nuevos)}</td><td>${fmtInt(totals.operaciones)}</td><td>${fmtCLP(totals.monto_fin)}</td><td>${fmtCLP(totals.dif_precio)}</td></tr></tbody>`;
+
+  const totalsHasActivity = totals.clientes_activos > 0 || totals.clientes_nuevos > 0 || totals.operaciones > 0 || totals.monto_fin > 0 || totals.dif_precio > 0;
+  const metaTodos = metasMes ? metasMes['TODOS'] : null;
+  html += `<tr class="total-row"><td class="left">Total general</td>`
+    + `<td>${metaCellHtml(totals.clientes_activos, metaTodos ? metaTodos.clientes_activos : null, fmtInt, totalsHasActivity)}</td>`
+    + `<td>${metaCellHtml(totals.clientes_nuevos, metaTodos ? metaTodos.clientes_nuevos : null, fmtInt, totalsHasActivity)}</td>`
+    + `<td>${metaCellHtml(totals.operaciones, metaTodos ? metaTodos.operaciones : null, fmtInt, totalsHasActivity)}</td>`
+    + `<td>${metaCellHtml(totals.monto_fin, metaTodos ? metaTodos.monto_fin : null, fmtCLP, totalsHasActivity)}</td>`
+    + `<td>${metaCellHtml(totals.dif_precio, metaTodos ? metaTodos.dif_precio : null, fmtCLP, totalsHasActivity)}</td></tr></tbody>`;
   document.getElementById('tbl-mescurso').innerHTML = html;
+
+  const legendEl = document.getElementById('mescursoLegend');
+  if(legendEl){
+    legendEl.style.display = hayMetasMes ? 'flex' : 'none';
+  }
 
   renderBarChart('chart-monto', rows.map(r => ({label:r.exec, value:r.monto_fin})).sort((a,b)=>b.value-a.value), 'teal', fmtCLP);
   renderBarChart('chart-dif', rows.map(r => ({label:r.exec, value:r.dif_precio})).sort((a,b)=>b.value-a.value), 'gold', fmtCLP);
+}
+
+/**
+ * Formatea una celda de la tabla "Mes en curso" con su meta.
+ * - Si el ejecutivo no ha cursado nada este mes (hasActivity=false) o no hay
+ *   meta cargada para ese mes/ejecutivo, se muestra solo el valor, sin pintar.
+ * - Si tiene actividad y el valor real queda por debajo de la meta, el
+ *   número se pinta en rojo y se muestra la meta debajo.
+ * - Si tiene actividad y cumple/supera la meta, se muestra la meta en verde.
+ */
+function metaCellHtml(actual, metaVal, fmt, hasActivity){
+  const valueText = fmt(actual || 0);
+  if(!hasActivity || metaVal === null || metaVal === undefined || !Number.isFinite(metaVal)){
+    return valueText;
+  }
+  const below = (actual || 0) < metaVal;
+  return `<span class="metric-cell">`
+    + `<span class="metric-value${below ? ' below-goal' : ''}">${valueText}</span>`
+    + `<span class="goal-tag${below ? '' : ' goal-met'}">meta ${fmt(metaVal)}</span>`
+    + `</span>`;
 }
 
 function renderBarChart(containerId, items, colorClass, fmt){
@@ -4432,6 +4523,19 @@ async function loadFromCSV(){
 
     masterRowsCache = masterRows;
     facturaRowsCache = facturaRows;
+
+    // Metas: opcional. Si el sheet de metas falla o está vacío, el
+    // dashboard sigue funcionando normalmente, solo sin pintar metas.
+    try{
+      const r3 = await fetch(csvUrl(CSV_METAS), { signal: controller.signal, cache: 'no-store' });
+      if(r3.ok){
+        const t3 = await r3.text();
+        metasRowsCache = parseCSV(t3);
+        METAS_BY_MONTH = buildMetas(metasRowsCache);
+        csvFingerprints.metas = simpleHash(t3);
+      }
+    } catch(e){ console.warn('No se pudieron leer las metas:', e); }
+
     DATA = buildData(masterRows, facturaRows, selectedYear);
     document.getElementById('yearLabel').textContent = String(selectedYear);
     renderHeroMeta();
@@ -4483,7 +4587,7 @@ function rebuildFromCache(){
 
 /* ---- Auto-actualización cuando cambian los CSV ---- */
 const AUTO_REFRESH_MS = 30000; // cada 30 s
-let csvFingerprints = { master: '', facturas: '', tareas: '', users: '' };
+let csvFingerprints = { master: '', facturas: '', tareas: '', users: '', metas: '' };
 let autoRefreshTimer = null;
 let autoRefreshBusy = false;
 
@@ -4509,16 +4613,18 @@ async function checkCsvUpdates(silent){
   if(!SESSION) return; // solo con sesión activa
   autoRefreshBusy = true;
   try{
-    const [tMaster, tFact, tTasks, tUsers] = await Promise.all([
+    const [tMaster, tFact, tTasks, tUsers, tMetas] = await Promise.all([
       fetchTextNoCache(CSV_MASTER).catch(() => null),
       fetchTextNoCache(CSV_FACTURAS).catch(() => null),
       fetchTextNoCache(CSV_TAREAS).catch(() => null),
-      fetchTextNoCache(CSV_USERS).catch(() => null)
+      fetchTextNoCache(CSV_USERS).catch(() => null),
+      fetchTextNoCache(CSV_METAS).catch(() => null)
     ]);
 
     let changedOps = false;
     let changedTasks = false;
     let changedUsers = false;
+    let changedMetas = false;
 
     if(tMaster != null){
       const h = simpleHash(tMaster);
@@ -4539,6 +4645,11 @@ async function checkCsvUpdates(silent){
       const h = simpleHash(tUsers);
       if(csvFingerprints.users && csvFingerprints.users !== h) changedUsers = true;
       csvFingerprints.users = h;
+    }
+    if(tMetas != null){
+      const h = simpleHash(tMetas);
+      if(csvFingerprints.metas && csvFingerprints.metas !== h) changedMetas = true;
+      csvFingerprints.metas = h;
     }
 
     // Primera pasada: solo guarda huellas, no recarga
@@ -4561,6 +4672,13 @@ async function checkCsvUpdates(silent){
     } else if(changedUsers){
       if(typeof loadUsers === 'function') await loadUsers();
       setStatus('Usuarios actualizados · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
+    } else if(changedMetas){
+      if(tMetas != null){
+        metasRowsCache = parseCSV(tMetas);
+        METAS_BY_MONTH = buildMetas(metasRowsCache);
+        if(DATA) renderMesCurso();
+        setStatus('Metas actualizadas · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
+      }
     }
   } catch(e){
     console.warn('Auto-refresh CSV:', e);
