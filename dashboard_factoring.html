@@ -4205,12 +4205,12 @@ function initCollapsibleSections(){
       try{ localStorage.setItem(key, open ? '1' : '0'); }catch(e){}
     };
 
-    // Por defecto abiertas; si el usuario colapsó antes, respetar
-    let startOpen = true;
+    // Por defecto cerradas; si el usuario abrió antes, respetar
+    let startOpen = false;
     try{
       const saved = localStorage.getItem(key);
-      if(saved === '0') startOpen = false;
       if(saved === '1') startOpen = true;
+      if(saved === '0') startOpen = false;
     }catch(e){}
     setOpen(startOpen);
 
