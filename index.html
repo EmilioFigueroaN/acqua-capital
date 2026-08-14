@@ -1069,7 +1069,7 @@ select#execFilter:focus-visible{
     <div class="login-error" id="loginError" role="alert"></div>
     <div class="login-field">
       <label for="loginNombre">Nombre</label>
-      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Viviana San Martín">
+      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Emilio Figueroa">
     </div>
     <div class="login-field">
       <label for="loginRut">RUT</label>
@@ -1404,7 +1404,7 @@ select#execFilter:focus-visible{
       </div>
       <div class="mescurso-legend" id="mescursoLegend" style="display:none;">
         <span class="dot-below"></span>
-        <span>En rojo: por debajo de la meta del mes. Se muestra la meta bajo cada valor. Ejecutivos sin operaciones este mes no se comparan contra su meta.</span>
+        <span>En rojo: por debajo de la meta del mes. Se muestra la meta bajo cada valor, incluidos los ejecutivos sin operaciones registradas aún.</span>
       </div>
     </div>
     <div class="chart-grid">
@@ -2205,24 +2205,22 @@ function renderMesCurso(){
 
   let html = '<thead><tr><th class="left">Ejecutivo</th><th>Clientes activos</th><th>Clientes nuevos</th><th>Operaciones</th><th>Monto anticipo</th><th>Diferencia precio</th></tr></thead><tbody>';
   rows.forEach(r => {
-    const hasActivity = (r.clientes_activos||0) > 0 || (r.clientes_nuevos||0) > 0 || (r.operaciones||0) > 0 || (r.monto_fin||0) > 0 || (r.dif_precio||0) > 0;
     const meta = metasMes ? metasMes[r.exec] : null;
     html += `<tr><td class="left">${escapeHtml(r.exec)}</td>`
-      + `<td>${metaCellHtml(r.clientes_activos || 0, meta ? meta.clientes_activos : null, fmtInt, hasActivity)}</td>`
-      + `<td>${metaCellHtml(r.clientes_nuevos || 0, meta ? meta.clientes_nuevos : null, fmtInt, hasActivity)}</td>`
-      + `<td>${metaCellHtml(r.operaciones || 0, meta ? meta.operaciones : null, fmtInt, hasActivity)}</td>`
-      + `<td>${metaCellHtml(r.monto_fin || 0, meta ? meta.monto_fin : null, fmtCLP, hasActivity)}</td>`
-      + `<td>${metaCellHtml(r.dif_precio || 0, meta ? meta.dif_precio : null, fmtCLP, hasActivity)}</td></tr>`;
+      + `<td>${metaCellHtml(r.clientes_activos || 0, meta ? meta.clientes_activos : null, fmtInt)}</td>`
+      + `<td>${metaCellHtml(r.clientes_nuevos || 0, meta ? meta.clientes_nuevos : null, fmtInt)}</td>`
+      + `<td>${metaCellHtml(r.operaciones || 0, meta ? meta.operaciones : null, fmtInt)}</td>`
+      + `<td>${metaCellHtml(r.monto_fin || 0, meta ? meta.monto_fin : null, fmtCLP)}</td>`
+      + `<td>${metaCellHtml(r.dif_precio || 0, meta ? meta.dif_precio : null, fmtCLP)}</td></tr>`;
   });
 
-  const totalsHasActivity = totals.clientes_activos > 0 || totals.clientes_nuevos > 0 || totals.operaciones > 0 || totals.monto_fin > 0 || totals.dif_precio > 0;
   const metaTodos = metasMes ? metasMes['TODOS'] : null;
   html += `<tr class="total-row"><td class="left">Total general</td>`
-    + `<td>${metaCellHtml(totals.clientes_activos, metaTodos ? metaTodos.clientes_activos : null, fmtInt, totalsHasActivity)}</td>`
-    + `<td>${metaCellHtml(totals.clientes_nuevos, metaTodos ? metaTodos.clientes_nuevos : null, fmtInt, totalsHasActivity)}</td>`
-    + `<td>${metaCellHtml(totals.operaciones, metaTodos ? metaTodos.operaciones : null, fmtInt, totalsHasActivity)}</td>`
-    + `<td>${metaCellHtml(totals.monto_fin, metaTodos ? metaTodos.monto_fin : null, fmtCLP, totalsHasActivity)}</td>`
-    + `<td>${metaCellHtml(totals.dif_precio, metaTodos ? metaTodos.dif_precio : null, fmtCLP, totalsHasActivity)}</td></tr></tbody>`;
+    + `<td>${metaCellHtml(totals.clientes_activos, metaTodos ? metaTodos.clientes_activos : null, fmtInt)}</td>`
+    + `<td>${metaCellHtml(totals.clientes_nuevos, metaTodos ? metaTodos.clientes_nuevos : null, fmtInt)}</td>`
+    + `<td>${metaCellHtml(totals.operaciones, metaTodos ? metaTodos.operaciones : null, fmtInt)}</td>`
+    + `<td>${metaCellHtml(totals.monto_fin, metaTodos ? metaTodos.monto_fin : null, fmtCLP)}</td>`
+    + `<td>${metaCellHtml(totals.dif_precio, metaTodos ? metaTodos.dif_precio : null, fmtCLP)}</td></tr></tbody>`;
   document.getElementById('tbl-mescurso').innerHTML = html;
 
   const legendEl = document.getElementById('mescursoLegend');
@@ -2236,15 +2234,14 @@ function renderMesCurso(){
 
 /**
  * Formatea una celda de la tabla "Mes en curso" con su meta.
- * - Si el ejecutivo no ha cursado nada este mes (hasActivity=false) o no hay
- *   meta cargada para ese mes/ejecutivo, se muestra solo el valor, sin pintar.
- * - Si tiene actividad y el valor real queda por debajo de la meta, el
+ * - Si no hay meta cargada para ese mes/ejecutivo, se muestra solo el valor.
+ * - Si el valor real (incluido $0 / 0) queda por debajo de la meta, el
  *   número se pinta en rojo y se muestra la meta debajo.
- * - Si tiene actividad y cumple/supera la meta, se muestra la meta en verde.
+ * - Si cumple o supera la meta, se muestra la meta en verde.
  */
-function metaCellHtml(actual, metaVal, fmt, hasActivity){
+function metaCellHtml(actual, metaVal, fmt){
   const valueText = fmt(actual || 0);
-  if(!hasActivity || metaVal === null || metaVal === undefined || !Number.isFinite(metaVal)){
+  if(metaVal === null || metaVal === undefined || !Number.isFinite(metaVal)){
     return valueText;
   }
   const below = (actual || 0) < metaVal;
