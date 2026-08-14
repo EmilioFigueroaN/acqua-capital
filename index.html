@@ -158,6 +158,43 @@
   }
   .sec-desc{color:var(--ink-soft); font-size:13.5px; margin:4px 0 16px 46px; max-width:720px; line-height:1.5;}
 
+  /* Secciones desplegables */
+  .sec-head{
+    cursor:pointer;
+    user-select:none;
+    border-radius:12px;
+    padding:8px 10px 8px 4px;
+    margin-left:-4px;
+    transition: background .15s ease;
+  }
+  .sec-head:hover{ background:rgba(0,128,200,0.06); }
+  .sec-head:focus-visible{
+    outline:2px solid var(--focus-ring);
+    outline-offset:2px;
+  }
+  .sec-chevron{
+    margin-left:auto;
+    flex-shrink:0;
+    width:28px; height:28px;
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:8px;
+    background:var(--cloud);
+    color:var(--blue);
+    font-size:14px;
+    font-weight:700;
+    transition: transform .2s ease, background .15s ease;
+    line-height:1;
+  }
+  .sec-head:hover .sec-chevron{ background:rgba(0,128,200,0.12); }
+  section.block.is-collapsed .sec-chevron{ transform: rotate(-90deg); }
+  section.block:not(.is-collapsed) .sec-chevron{ transform: rotate(0deg); }
+  .sec-body{
+    margin-top:4px;
+  }
+  section.block.is-collapsed .sec-body{ display:none; }
+  section.block.is-collapsed{ margin-top:28px; }
+  section.block.is-collapsed .sec-head{ margin-bottom:0; }
+
   .card{
     background:var(--white); border:1px solid rgba(217,210,192,0.9); border-radius:var(--radius);
     box-shadow:var(--shadow); padding:22px 22px 20px; overflow:auto;
@@ -4135,6 +4172,59 @@ async function reloadTasksAndRender(){
   applyRoleToTasksUI();
 }
 
+
+function initCollapsibleSections(){
+  document.querySelectorAll('section.block').forEach((sec, idx) => {
+    if(sec.dataset.collapsible === '1') return;
+    const head = sec.querySelector(':scope > .sec-head');
+    if(!head) return;
+    sec.dataset.collapsible = '1';
+
+    const body = document.createElement('div');
+    body.className = 'sec-body';
+    while(head.nextSibling) body.appendChild(head.nextSibling);
+    sec.appendChild(body);
+
+    let chev = head.querySelector('.sec-chevron');
+    if(!chev){
+      chev = document.createElement('span');
+      chev.className = 'sec-chevron';
+      chev.setAttribute('aria-hidden', 'true');
+      chev.textContent = '▾';
+      head.appendChild(chev);
+    }
+
+    head.setAttribute('role', 'button');
+    head.tabIndex = 0;
+    const key = 'acqua_sec_open_' + (sec.id || ('i' + idx));
+
+    const setOpen = (open) => {
+      sec.classList.toggle('is-collapsed', !open);
+      body.hidden = !open;
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      try{ localStorage.setItem(key, open ? '1' : '0'); }catch(e){}
+    };
+
+    // Por defecto abiertas; si el usuario colapsó antes, respetar
+    let startOpen = true;
+    try{
+      const saved = localStorage.getItem(key);
+      if(saved === '0') startOpen = false;
+      if(saved === '1') startOpen = true;
+    }catch(e){}
+    setOpen(startOpen);
+
+    const toggle = (e) => {
+      if(e) e.preventDefault();
+      setOpen(head.getAttribute('aria-expanded') !== 'true');
+    };
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(e); }
+    });
+  });
+}
+
 function wireTasksUI(){
   // Cargar desde archivo al inicio
   loadTasksFromCSVFile().then(() => applyRoleToTasksUI()).catch(() => applyRoleToTasksUI());
@@ -4484,6 +4574,7 @@ if(moraTramoFilter){
   moraTramoFilter.addEventListener('change', () => { if(DATA) renderMora(); });
 }
 
+initCollapsibleSections();
 wireTasksUI();
 document.getElementById('btnLogin').addEventListener('click', attemptLogin);
 document.getElementById('btnLogout').addEventListener('click', logout);
