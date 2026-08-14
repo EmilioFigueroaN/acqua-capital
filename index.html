@@ -1069,7 +1069,7 @@ select#execFilter:focus-visible{
     <div class="login-error" id="loginError" role="alert"></div>
     <div class="login-field">
       <label for="loginNombre">Nombre</label>
-      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Emilio Figueroa">
+      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Viviana San Martín">
     </div>
     <div class="login-field">
       <label for="loginRut">RUT</label>
@@ -1861,6 +1861,17 @@ function buildData(masterRows, facturaRows, selectedYear){
 
   const ejecutivos = Array.from(execSet).sort((a,b)=>a.localeCompare(b,'es'));
 
+  // Fusiona con los ejecutivos dados de alta en users.csv (rol=ejecutivo),
+  // así uno nuevo aparece de inmediato en el filtro y en las tablas aunque
+  // todavía no tenga operaciones cargadas en el maestro.
+  const ejecutivosSet = new Set(ejecutivos);
+  if(typeof USERS !== 'undefined' && Array.isArray(USERS)){
+    USERS.forEach(u => {
+      if(u && u.rol === 'ejecutivo' && u.ejecutivoKey) ejecutivosSet.add(u.ejecutivoKey);
+    });
+  }
+  const ejecutivosCombinados = Array.from(ejecutivosSet).sort((a,b)=>a.localeCompare(b,'es'));
+
   // Mes en curso = calendario de HOY. Resumen = los 12 meses del año seleccionado.
   const now = new Date();
   const current_month = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
@@ -1874,7 +1885,7 @@ function buildData(masterRows, facturaRows, selectedYear){
 
   const summary = { ejecutivos:{}, total:{ months:{}, accum:emptyMetrics() } };
   months.forEach(m => { summary.total.months[m] = emptyMetrics(); });
-  ejecutivos.forEach(e => {
+  ejecutivosCombinados.forEach(e => {
     summary.ejecutivos[e] = { months:{}, accum:emptyMetrics() };
     months.forEach(m => { summary.ejecutivos[e].months[m] = emptyMetrics(); });
   });
@@ -2051,7 +2062,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     selected_year: year,
     months,
     month_labels,
-    ejecutivos,
+    ejecutivos: ejecutivosCombinados,
     summary,
     notes,
     facturas_table,
@@ -4041,7 +4052,6 @@ function renderTasks(){
         <div class="task-meta">${meta.join('')}</div>
       </div>
       <div class="task-actions">
-        ${isEjecutivo() ? '' : '<button type="button" data-act="delete" class="danger" title="Eliminar">Eliminar</button>'}
       </div>
     </li>`;
   }).join('');
