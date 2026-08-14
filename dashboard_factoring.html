@@ -1053,13 +1053,15 @@ select#execFilter:focus-visible{
     <span id="kpiDayWrap" class="kpi-mode-block" hidden style="display:none">
       <label for="kpiDay">Día</label>
       <input type="date" id="kpiDay" aria-label="Día a analizar">
-      <span class="kpi-hint">Comparación automática respecto del día hábil anterior</span>
+      <label for="kpiDayBase">Comparar con</label>
+      <input type="date" id="kpiDayBase" aria-label="Día base de comparación">
     </span>
 
     <span id="kpiWeekWrap" class="kpi-mode-block" hidden style="display:none">
       <label for="kpiWeek">Semana (lunes)</label>
-      <input type="date" id="kpiWeek" aria-label="Lunes de la semana">
-      <span class="kpi-hint">Comparación automática respecto de la semana anterior (lunes a domingo)</span>
+      <input type="date" id="kpiWeek" aria-label="Lunes de la semana a analizar">
+      <label for="kpiWeekBase">Comparar con (lunes)</label>
+      <input type="date" id="kpiWeekBase" aria-label="Lunes de la semana base">
     </span>
 
     <span id="kpiMonthWrap" class="kpi-mode-block">
@@ -1620,8 +1622,10 @@ let selectedYear = new Date().getFullYear();
 let kpiMonthYm = null; // null = mes calendario actual
 let kpiBase = 'prev_month';
 let kpiMode = 'month'; // 'day' | 'week' | 'month'
-let kpiDay = '';   // YYYY-MM-DD
-let kpiWeek = '';  // YYYY-MM-DD (monday)
+let kpiDay = '';       // YYYY-MM-DD periodo a observar
+let kpiDayBase = '';   // YYYY-MM-DD día base de comparación
+let kpiWeek = '';      // YYYY-MM-DD lunes de la semana a observar
+let kpiWeekBase = '';  // YYYY-MM-DD lunes de la semana base
 let masterRowsCache = [];
 let facturaRowsCache = [];
 
@@ -2542,14 +2546,18 @@ function setupKpiControls(){
   const weekWrap = document.getElementById('kpiWeekWrap');
   const monthWrap = document.getElementById('kpiMonthWrap');
   const dayEl = document.getElementById('kpiDay');
+  const dayBaseEl = document.getElementById('kpiDayBase');
   const weekEl = document.getElementById('kpiWeek');
+  const weekBaseEl = document.getElementById('kpiWeekBase');
   const selMonth = document.getElementById('kpiMonth');
   const selBase = document.getElementById('kpiBase');
   if(!modeEl || !DATA) return;
 
   const today = new Date();
   if(!kpiDay) kpiDay = toISODate(today);
+  if(!kpiDayBase) kpiDayBase = shiftDateISO(kpiDay, -1);
   if(!kpiWeek) kpiWeek = toISODate(mondayOf(today));
+  if(!kpiWeekBase) kpiWeekBase = shiftDateISO(kpiWeek, -7);
 
   modeEl.value = kpiMode;
   function applyKpiModeUI(mode){
@@ -2565,7 +2573,9 @@ function setupKpiControls(){
   applyKpiModeUI(kpiMode);
 
   if(dayEl) dayEl.value = kpiDay;
+  if(dayBaseEl) dayBaseEl.value = kpiDayBase;
   if(weekEl) weekEl.value = kpiWeek;
+  if(weekBaseEl) weekBaseEl.value = kpiWeekBase;
 
   if(selMonth){
     const opts = DATA.months.slice();
@@ -2589,12 +2599,33 @@ function setupKpiControls(){
       applyKpiModeUI(kpiMode);
       renderKpis(); updateContextBars();
     });
-    if(dayEl) dayEl.addEventListener('change', () => { kpiDay = dayEl.value; renderKpis(); updateContextBars(); });
+    if(dayEl) dayEl.addEventListener('change', () => {
+      kpiDay = dayEl.value;
+      // si la base queda vacía o igual al día, sugerir día anterior
+      if(!kpiDayBase || kpiDayBase === kpiDay){
+        kpiDayBase = shiftDateISO(kpiDay, -1);
+        if(dayBaseEl) dayBaseEl.value = kpiDayBase;
+      }
+      renderKpis(); updateContextBars();
+    });
+    if(dayBaseEl) dayBaseEl.addEventListener('change', () => {
+      kpiDayBase = dayBaseEl.value;
+      renderKpis(); updateContextBars();
+    });
     if(weekEl) weekEl.addEventListener('change', () => {
-      // normalizar al lunes de esa semana
       const d = parseFullDate(weekEl.value);
       if(d){ kpiWeek = toISODate(mondayOf(d)); weekEl.value = kpiWeek; }
       else kpiWeek = weekEl.value;
+      if(!kpiWeekBase || kpiWeekBase === kpiWeek){
+        kpiWeekBase = shiftDateISO(kpiWeek, -7);
+        if(weekBaseEl) weekBaseEl.value = kpiWeekBase;
+      }
+      renderKpis(); updateContextBars();
+    });
+    if(weekBaseEl) weekBaseEl.addEventListener('change', () => {
+      const d = parseFullDate(weekBaseEl.value);
+      if(d){ kpiWeekBase = toISODate(mondayOf(d)); weekBaseEl.value = kpiWeekBase; }
+      else kpiWeekBase = weekBaseEl.value;
       renderKpis(); updateContextBars();
     });
     if(selMonth) selMonth.addEventListener('change', () => { kpiMonthYm = selMonth.value; renderKpis(); updateContextBars(); });
@@ -2612,8 +2643,8 @@ function renderKpis(){
 
   if(kpiMode === 'day'){
     const day = kpiDay || toISODate(new Date());
+    const prevDay = kpiDayBase || shiftDateISO(day, -1);
     cur = metricsForDateRange(day, day);
-    const prevDay = shiftDateISO(day, -1);
     prev = metricsForDateRange(prevDay, prevDay);
     baseLabel = 'vs ' + fmtISO_es(prevDay);
     tagText = fmtISO_es(day) + ' · ' + baseLabel;
@@ -2624,13 +2655,15 @@ function renderKpis(){
     const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
     const sunISO = toISODate(sun);
     cur = metricsForDateRange(monISO, sunISO);
-    const prevMon = new Date(mon); prevMon.setDate(mon.getDate() - 7);
-    const prevSun = new Date(prevMon); prevSun.setDate(prevMon.getDate() + 6);
-    const prevMonISO = toISODate(prevMon);
-    const prevSunISO = toISODate(prevSun);
-    prev = metricsForDateRange(prevMonISO, prevSunISO);
-    baseLabel = 'vs ' + fmtISO_es(prevMonISO) + ' → ' + fmtISO_es(prevSunISO);
-    tagText = fmtISO_es(monISO) + ' → ' + fmtISO_es(sunISO) + ' · semana ant.';
+
+    let baseMon = parseFullDate(kpiWeekBase) || new Date(mon.getTime() - 7*86400000);
+    baseMon = mondayOf(baseMon);
+    const baseMonISO = toISODate(baseMon);
+    const baseSun = new Date(baseMon); baseSun.setDate(baseMon.getDate() + 6);
+    const baseSunISO = toISODate(baseSun);
+    prev = metricsForDateRange(baseMonISO, baseSunISO);
+    baseLabel = 'vs ' + fmtISO_es(baseMonISO) + ' → ' + fmtISO_es(baseSunISO);
+    tagText = fmtISO_es(monISO) + ' → ' + fmtISO_es(sunISO) + ' · ' + baseLabel;
   } else {
     // month
     const curYm = kpiMonthYm || DATA.generated_current_month;
