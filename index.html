@@ -372,8 +372,8 @@ select#execFilter:focus-visible{
   /* ---------- KPI STRIP ---------- */
   .kpi-grid{
     display:grid;
-    grid-template-columns:repeat(5, 1fr);
-    gap:14px;
+    grid-template-columns:repeat(6, 1fr);
+    gap:12px;
     margin-top:22px;
   }
   @media (max-width:1100px){ .kpi-grid{ grid-template-columns:repeat(3, 1fr); } }
@@ -1051,7 +1051,7 @@ select#execFilter:focus-visible{
     <div class="login-error" id="loginError" role="alert"></div>
     <div class="login-field">
       <label for="loginNombre">Nombre</label>
-      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Emilio Figueroa">
+      <input type="text" id="loginNombre" autocomplete="name" placeholder="Ej. Viviana San Martín">
     </div>
     <div class="login-field">
       <label for="loginRut">RUT</label>
@@ -1401,38 +1401,14 @@ select#execFilter:focus-visible{
       <button type="button" id="btnDownloadCharts" class="btn-refresh" title="Descargar los datos de estos gráficos en CSV">⬇ Descargar datos de gráficos (CSV)</button>
     </div>
   </section>
-<section class="block" id="secComisiones">
-    <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Comisiones</h2></div>
-    <p class="sec-desc">Total de comisiones y gastos asociados a las operaciones: comisión RC, gasto legal y gasto de operación. El desglose respeta el filtro de ejecutivo.</p>
-    <div class="ctx-bar" id="ctxComisiones">
-      <span class="ctx-pill" id="ctxComisionesPill">—</span>
-      <span class="ctx-text">Fuente: columnas de comisión RC, gasto legal y gasto de operación del maestro.</span>
-    </div>
-    <div class="card">
-      <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
-      <div class="mora-table-wrap" style="margin-top:12px;">
-        <table id="tbl-comisiones">
-          <thead>
-            <tr>
-              <th class="left">Concepto</th>
-              <th>Operaciones</th>
-              <th>Monto (CLP)</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <div class="cluster-label" role="presentation">
+<div class="cluster-label" role="presentation">
     <span class="cluster-kicker">Cluster de prioridad</span>
     <span class="cluster-name">Gestión y seguimiento</span>
     <span class="cluster-hint">Pendientes operativos del equipo.</span>
   </div>
 
 <section class="block" id="secTareas">
-    <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Lista de tareas</h2></div>
+    <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Lista de tareas</h2></div>
     <p class="sec-desc">Pendientes operativos del equipo. La fuente es la hoja de tareas en Google Sheets. Gerencia asigna y administra; cada ejecutivo visualiza únicamente las tareas a su cargo.</p>
     <div class="card">
       <div class="task-filters">
@@ -1816,7 +1792,7 @@ function labelMonthShort(ym){
 }
 
 function emptyMetrics(){
-  return {clientes_nuevos:0, operaciones:0, monto_fin:0, dif_precio:0};
+  return {clientes_nuevos:0, clientes_activos:0, operaciones:0, monto_fin:0, dif_precio:0, comisiones:0};
 }
 
 /* ===================== 2. CALCULAR DATOS ===================== */
@@ -1837,6 +1813,9 @@ function buildData(masterRows, facturaRows, selectedYear){
   const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
   const colGiro   = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
   const colColocado = keys.find(k => /colocado\s*mes/i.test(k)) || null;
+  const colLegal = keys.find(k => /\(34\)/.test(k) || /gasto\s*legal.*comisi/i.test(k));
+  const colGastoOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
+  const colDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
 
   masterRows.forEach(r => {
     const e = r[colExec] || '';
@@ -1890,6 +1869,7 @@ function buildData(masterRows, facturaRows, selectedYear){
 
   const seenNuevoAcc = {};
   const seenNuevoAccTot = {};
+  const seenActiveMonth = {}; // key: e|ym|cli or tot|ym|cli
 
   masterRows.forEach(r => {
     const e = r[colExec] || '';
@@ -1912,7 +1892,6 @@ function buildData(masterRows, facturaRows, selectedYear){
 
     const cell = summary.ejecutivos[e].months[ym];
     if(esPrimera && cliName){
-      // Una sola vez por cliente en su mes de primera op
       cell.clientes_nuevos += 1;
       summary.total.months[ym].clientes_nuevos += 1;
       if(!seenNuevoAcc[e + '|' + cliName]){
@@ -1924,22 +1903,46 @@ function buildData(masterRows, facturaRows, selectedYear){
         summary.total.accum.clientes_nuevos += 1;
       }
     }
+    // Clientes activos = empresas distintas que operaron en el periodo
+    if(cliName){
+      const kE = e + '|' + ym + '|' + cliName;
+      const kT = 'tot|' + ym + '|' + cliName;
+      if(!seenActiveMonth[kE]){
+        seenActiveMonth[kE] = true;
+        cell.clientes_activos += 1;
+        summary.ejecutivos[e].accum.clientes_activos += 1;
+      }
+      if(!seenActiveMonth[kT]){
+        seenActiveMonth[kT] = true;
+        summary.total.months[ym].clientes_activos += 1;
+        summary.total.accum.clientes_activos += 1;
+      }
+    }
+    let comis = 0;
+    if(colLegal) comis += toNum(r[colLegal]);
+    if(colGastoOp) comis += toNum(r[colGastoOp]);
+    if(colDealer) comis += toNum(r[colDealer]);
+
     cell.operaciones += 1;
     cell.monto_fin += monto;
     cell.dif_precio += dif;
+    cell.comisiones += comis;
 
     const acc = summary.ejecutivos[e].accum;
     acc.operaciones += 1;
     acc.monto_fin += monto;
     acc.dif_precio += dif;
+    acc.comisiones += comis;
 
     summary.total.months[ym].operaciones += 1;
     summary.total.months[ym].monto_fin += monto;
     summary.total.months[ym].dif_precio += dif;
+    summary.total.months[ym].comisiones += comis;
 
     summary.total.accum.operaciones += 1;
     summary.total.accum.monto_fin += monto;
     summary.total.accum.dif_precio += dif;
+    summary.total.accum.comisiones += comis;
   });
 
   const missing = months.filter(m => !masterRows.some(r => parseYM(r[colFecha]) === m));
@@ -2437,9 +2440,11 @@ function sumMetrics(list){
   const t = emptyMetrics();
   list.forEach(c => {
     t.clientes_nuevos += c.clientes_nuevos || 0;
+    t.clientes_activos += c.clientes_activos || 0;
     t.operaciones += c.operaciones || 0;
     t.monto_fin += c.monto_fin || 0;
     t.dif_precio += c.dif_precio || 0;
+    t.comisiones += c.comisiones || 0;
   });
   return t;
 }
@@ -2507,6 +2512,10 @@ function metricsForMonthRaw(ym){
   const firstMap = buildClientFirstOpMap();
   const t = emptyMetrics();
   const seen = {};
+  const seenActive = {};
+  const colLegal = keys.find(k => /\(34\)/.test(k) || /gasto\s*legal.*comisi/i.test(k));
+  const colOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
+  const colDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
   masterRowsCache.forEach(r => {
     const e = r[colExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
@@ -2516,12 +2525,19 @@ function metricsForMonthRaw(ym){
       seen[cli] = true;
       t.clientes_nuevos += 1;
     }
+    if(cli && !seenActive[cli]){
+      seenActive[cli] = true;
+      t.clientes_activos += 1;
+    }
     t.operaciones += 1;
     let monto = toNum(r[colMonto]);
     if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
     if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
     t.monto_fin += monto;
     t.dif_precio += colInteres ? toNum(r[colInteres]) : 0;
+    if(colLegal) t.comisiones += toNum(r[colLegal]);
+    if(colOp) t.comisiones += toNum(r[colOp]);
+    if(colDealer) t.comisiones += toNum(r[colDealer]);
   });
   return t;
 }
@@ -2548,6 +2564,10 @@ function metricsForDateRange(fromStr, toStr){
   const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
   const firstMap = buildClientFirstOpMap();
   const seen = {};
+  const seenActive = {};
+  const colLegal = keys.find(k => /\(34\)/.test(k) || /gasto\s*legal.*comisi/i.test(k));
+  const colOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
+  const colDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
   masterRowsCache.forEach(r => {
     const e = r[colExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
@@ -2556,10 +2576,13 @@ function metricsForDateRange(fromStr, toStr){
     if(startFrom && d < startFrom) return;
     if(endTo && d > endTo) return;
     const cli = String(r[colCli]||'').trim();
-    // Solo cuenta si ESTA operación es la primera del cliente en todo el maestro
     if(cli && isFirstOpOfClient(r, colCli, colFecha, firstMap) && !seen[cli]){
       seen[cli] = true;
       t.clientes_nuevos += 1;
+    }
+    if(cli && !seenActive[cli]){
+      seenActive[cli] = true;
+      t.clientes_activos += 1;
     }
     t.operaciones += 1;
     let monto = toNum(r[colMonto]);
@@ -2567,6 +2590,9 @@ function metricsForDateRange(fromStr, toStr){
     if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
     t.monto_fin += monto;
     t.dif_precio += colInteres ? toNum(r[colInteres]) : 0;
+    if(colLegal) t.comisiones += toNum(r[colLegal]);
+    if(colOp) t.comisiones += toNum(r[colOp]);
+    if(colDealer) t.comisiones += toNum(r[colDealer]);
   });
   return t;
 }
@@ -2792,9 +2818,9 @@ function renderKpis(){
 
   const items = [
     {
-      tone: '', label: 'Operaciones',
-      value: fmtInt(cur.operaciones),
-      delta: pctDelta(cur.operaciones, prev.operaciones),
+      tone: '', label: 'Clientes activos',
+      value: fmtInt(Math.round(cur.clientes_activos || 0)),
+      delta: pctDelta(cur.clientes_activos || 0, prev.clientes_activos || 0),
       sub: baseLabel
     },
     {
@@ -2813,6 +2839,12 @@ function renderKpis(){
       tone: '', label: 'Clientes nuevos',
       value: fmtInt(Math.round(cur.clientes_nuevos)),
       delta: pctDelta(cur.clientes_nuevos, prev.clientes_nuevos),
+      sub: baseLabel
+    },
+    {
+      tone: 'acqua', label: 'Comisiones',
+      value: fmtCLP(cur.comisiones || 0),
+      delta: pctDelta(cur.comisiones || 0, prev.comisiones || 0),
       sub: baseLabel
     },
     {
@@ -4344,7 +4376,6 @@ function renderAll(){
   renderKpis();
   updateContextBars();
   renderIntel();
-  renderComisiones();
   renderMora();
   renderCesion();
   renderResumen();
