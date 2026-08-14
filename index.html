@@ -2124,7 +2124,7 @@ function renderResumen(){
 function renderMesCurso(){
   const m = DATA.generated_current_month;
   document.getElementById('mesCursoDesc').innerHTML =
-    'Mismas métricas y definiciones de la sección anterior, acotadas exclusivamente a <b>' + DATA.current_month_label + '</b>.';
+    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo: clientes activos (empresas distintas que operaron), clientes nuevos, operaciones, monto anticipado y diferencia de precio.';
 
   const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
   const rows = execs.map(e => {
@@ -2134,17 +2134,18 @@ function renderMesCurso(){
 
   const totals = emptyMetrics();
   rows.forEach(r => {
-    totals.clientes_nuevos += r.clientes_nuevos;
-    totals.operaciones += r.operaciones;
-    totals.monto_fin += r.monto_fin;
-    totals.dif_precio += r.dif_precio;
+    totals.clientes_nuevos += r.clientes_nuevos || 0;
+    totals.clientes_activos += r.clientes_activos || 0;
+    totals.operaciones += r.operaciones || 0;
+    totals.monto_fin += r.monto_fin || 0;
+    totals.dif_precio += r.dif_precio || 0;
   });
 
-  let html = '<thead><tr><th class="left">Ejecutivo</th><th>Clientes nuevos</th><th>Operaciones</th><th>Monto anticipo</th><th>Diferencia precio</th></tr></thead><tbody>';
+  let html = '<thead><tr><th class="left">Ejecutivo</th><th>Clientes activos</th><th>Clientes nuevos</th><th>Operaciones</th><th>Monto anticipo</th><th>Diferencia precio</th></tr></thead><tbody>';
   rows.forEach(r => {
-    html += `<tr><td class="left">${escapeHtml(r.exec)}</td><td>${fmtInt(r.clientes_nuevos)}</td><td>${fmtInt(r.operaciones)}</td><td>${fmtCLP(r.monto_fin)}</td><td>${fmtCLP(r.dif_precio)}</td></tr>`;
+    html += `<tr><td class="left">${escapeHtml(r.exec)}</td><td>${fmtInt(r.clientes_activos || 0)}</td><td>${fmtInt(r.clientes_nuevos || 0)}</td><td>${fmtInt(r.operaciones || 0)}</td><td>${fmtCLP(r.monto_fin || 0)}</td><td>${fmtCLP(r.dif_precio || 0)}</td></tr>`;
   });
-  html += `<tr class="total-row"><td class="left">Total general</td><td>${fmtInt(totals.clientes_nuevos)}</td><td>${fmtInt(totals.operaciones)}</td><td>${fmtCLP(totals.monto_fin)}</td><td>${fmtCLP(totals.dif_precio)}</td></tr></tbody>`;
+  html += `<tr class="total-row"><td class="left">Total general</td><td>${fmtInt(totals.clientes_activos)}</td><td>${fmtInt(totals.clientes_nuevos)}</td><td>${fmtInt(totals.operaciones)}</td><td>${fmtCLP(totals.monto_fin)}</td><td>${fmtCLP(totals.dif_precio)}</td></tr></tbody>`;
   document.getElementById('tbl-mescurso').innerHTML = html;
 
   renderBarChart('chart-monto', rows.map(r => ({label:r.exec, value:r.monto_fin})).sort((a,b)=>b.value-a.value), 'teal', fmtCLP);
@@ -2274,10 +2275,10 @@ function downloadMesCursoChartsCSV(){
   }).sort((a, b) => b.monto_fin - a.monto_fin);
 
   const out = [
-    ['Ejecutivo', 'Clientes nuevos', 'Operaciones', 'Monto anticipo (CLP)', 'Diferencia precio (CLP)']
+    ['Ejecutivo', 'Clientes activos', 'Clientes nuevos', 'Operaciones', 'Monto anticipo (CLP)', 'Diferencia precio (CLP)']
   ];
   rows.forEach(r => {
-    out.push([r.exec, Math.round(r.clientes_nuevos), r.operaciones, Math.round(r.monto_fin), Math.round(r.dif_precio)]);
+    out.push([r.exec, Math.round(r.clientes_activos || 0), Math.round(r.clientes_nuevos || 0), r.operaciones || 0, Math.round(r.monto_fin || 0), Math.round(r.dif_precio || 0)]);
   });
 
   const filterSuffix = currentExec === 'ALL' ? 'todos' : currentExec.replace(/\s+/g, '_');
