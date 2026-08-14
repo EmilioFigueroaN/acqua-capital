@@ -1020,7 +1020,7 @@ select#execFilter:focus-visible{
       </div>
     <p class="eyebrow">Operaciones · Factoring</p>
     <h1 class="title">Dashboard de Factoring</h1>
-    <p class="hero-sub">Aquí puedes ver cómo van las operaciones de factoring: cuánto se ha adelantado, a quiénes, qué está en mora y qué facturas hay disponibles para ceder.</p>
+    <p class="hero-sub">Vista consolidada de la operación de factoring: anticipos, concentración de cartera, mora, inventario de facturas y cesiones. Los filtros de ejecutivo y periodo aplican a todo el panel.</p>
     <div class="hero-meta" id="heroMeta"></div>
   </div>
 </div>
@@ -1037,7 +1037,7 @@ select#execFilter:focus-visible{
       <button type="button" id="btnNextYear" title="Año siguiente" aria-label="Año siguiente">›</button>
     </div>
     <span class="filter-tag" id="filterTag" aria-live="polite">Mostrando todos los ejecutivos</span>
-    <button type="button" id="btnRefresh" class="btn-refresh" title="Actualizar los datos leyendo de nuevo los archivos CSV" aria-label="Actualizar datos desde los archivos CSV">↻ Actualizar desde CSV</button>
+    <button type="button" id="btnRefresh" class="btn-refresh" title="Actualizar datos desde las fuentes (Google Sheets)" aria-label="Actualizar datos desde los archivos CSV">↻ Actualizar datos</button>
     <span class="load-status" id="loadStatus" role="status" aria-live="polite"></span>
   </div>
 
@@ -1053,13 +1053,13 @@ select#execFilter:focus-visible{
     <span id="kpiDayWrap" class="kpi-mode-block" hidden style="display:none">
       <label for="kpiDay">Día</label>
       <input type="date" id="kpiDay" aria-label="Día a analizar">
-      <span class="kpi-hint">Se compara automáticamente con el día anterior</span>
+      <span class="kpi-hint">Comparación automática respecto del día hábil anterior</span>
     </span>
 
     <span id="kpiWeekWrap" class="kpi-mode-block" hidden style="display:none">
       <label for="kpiWeek">Semana (lunes)</label>
       <input type="date" id="kpiWeek" aria-label="Lunes de la semana">
-      <span class="kpi-hint">Se compara automáticamente con la semana anterior</span>
+      <span class="kpi-hint">Comparación automática respecto de la semana anterior (lunes a domingo)</span>
     </span>
 
     <span id="kpiMonthWrap" class="kpi-mode-block">
@@ -1086,33 +1086,33 @@ select#execFilter:focus-visible{
     <div class="intel-grid">
       <div class="intel-card">
         <h3>Concentración por cliente (cedente)</h3>
-        <p class="intel-sub">Estas son las empresas que emitieron las facturas: a ellas les deben el pago sus compradores (deudores). Nosotros les adelantamos dinero al comprarles esas facturas. El gráfico muestra qué parte del total adelantado se concentra en cada una. Si una sola supera el <b>25%</b>, hay más riesgo de depender demasiado de ese cliente. Debajo de cada barra se indica qué <b>% corresponde a cada ejecutivo</b> en ese cliente. Despliega el cliente para ver su <b>top 5 de deudores</b>.</p>
+        <p class="intel-sub"><b>Cliente (cedente):</b> empresa a la que Acqua anticipa el pago de sus facturas. El gráfico ordena a los principales clientes por participación en el monto total anticipado. Una participación igual o superior al <b>25%</b> se considera concentración elevada. Bajo cada barra se detalla la participación por ejecutivo; al expandir un cliente se muestra su top 5 de deudores.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxConcPill">—</span>
-          <span class="ctx-text" id="ctxConcText">Se calcula con las operaciones reales del maestro. Respeta el filtro de ejecutivo elegido arriba.</span>
+          <span class="ctx-text" id="ctxConcText">Fuente: operaciones del maestro. Respeta el filtro de ejecutivo seleccionado.</span>
         </div>
         <div class="conc-meters" id="concMeters"></div>
         <div class="conc-summary" id="concSummary"></div>
-        <p class="conc-threshold">Colores de alerta: rojo si un cliente concentra 25% o más · celeste desde 15% · azul bajo 15%.</p>
+        <p class="conc-threshold">Criterio visual: rojo ≥ 25% · celeste 15%–24,9% · azul &lt; 15%.</p>
       </div>
       <div class="intel-card">
         <h3>Concentración por deudor (quien paga)</h3>
-        <p class="intel-sub">Estas son las empresas que deben pagar las facturas (deudores). Le deben a nuestros clientes; después de la cesión el cobro puede quedar a cargo nuestro o de la financiera. Sirve para ver si dependemos demasiado de un solo pagador.</p>
+        <p class="intel-sub"><b>Deudor:</b> empresa obligada al pago de la factura. El gráfico muestra qué proporción del book depende de cada pagador. Concentraciones altas en un solo deudor aumentan el riesgo de cobranza.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxDeudorPill">—</span>
-          <span class="ctx-text" id="ctxDeudorText">Se calcula con las operaciones reales del maestro. Respeta el filtro de ejecutivo elegido arriba.</span>
+          <span class="ctx-text" id="ctxDeudorText">Fuente: operaciones del maestro. Respeta el filtro de ejecutivo seleccionado.</span>
         </div>
         <div class="conc-meters" id="deudorMeters"></div>
         <div class="conc-summary" id="deudorSummary"></div>
-        <p class="conc-threshold">Colores de alerta: rojo si un deudor concentra 25% o más · celeste desde 15% · azul bajo 15%.</p>
+        <p class="conc-threshold">Criterio visual: rojo ≥ 25% · celeste 15%–24,9% · azul &lt; 15%.</p>
       </div>
     </div>
     <div class="intel-card insights-full">
-      <h3>Insights automáticos</h3>
-      <p class="intel-sub">Resúmenes automáticos que destacan riesgos, oportunidades o datos incompletos según las reglas del negocio.</p>
+      <h3>Lecturas automáticas</h3>
+      <p class="intel-sub">Síntesis generada a partir de los datos visibles: concentración, desempeño del periodo, calidad de información e inventario de facturas. Se actualiza al cambiar filtros o periodo.</p>
       <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
         <span class="ctx-pill" id="ctxInsightPill">—</span>
-        <span class="ctx-text" id="ctxInsightText">Se actualizan solos cuando cambias el ejecutivo, el periodo de análisis o los datos.</span>
+        <span class="ctx-text" id="ctxInsightText">Se recalculan al modificar ejecutivo, periodo o al actualizar los datos de origen.</span>
       </div>
       <ul class="insight-list" id="insightList"></ul>
     </div>
@@ -1121,7 +1121,7 @@ select#execFilter:focus-visible{
   <!-- SECTION 1 -->
   <section class="block" id="secResumen" hidden>
     <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Resumen General</h2></div>
-    <p class="sec-desc">Tabla del año elegido, mes a mes y por ejecutivo: cuántas operaciones hubo, cuánto dinero se adelantó, cuánta diferencia de precio se generó y cuántos clientes nuevos entraron. Cambia el año con las flechas de arriba.</p>
+    <p class="sec-desc">Desempeño anual por ejecutivo y mes: operaciones, monto anticipado, diferencia de precio y clientes nuevos. El año se selecciona con las flechas de la barra superior.</p>
     <div class="card">
       <table id="tbl-resumen"></table>
     </div>
@@ -1134,10 +1134,10 @@ select#execFilter:focus-visible{
   <!-- SECTION 2 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Mes en curso</h2></div>
-    <p class="sec-desc" id="mesCursoDesc">Ranking del mes actual: qué ejecutivo adelantó más dinero y quién generó más diferencia de precio (el ingreso del factoring).</p>
+    <p class="sec-desc" id="mesCursoDesc">Comparativo del mes en curso entre ejecutivos: volumen anticipado y diferencia de precio generada. Los gráficos utilizan los mismos montos de la tabla.</p>
     <div class="ctx-bar" id="ctxMesCurso">
       <span class="ctx-pill" id="ctxMesCursoPill">—</span>
-      <span class="ctx-text" id="ctxMesCursoText">Solo operaciones cuya fecha de creación cae en este mes. Los gráficos debajo usan los mismos números.</span>
+      <span class="ctx-text" id="ctxMesCursoText">Incluye únicamente operaciones con fecha de creación en el mes indicado.</span>
     </div>
     <div class="card">
       <div class="table-scroll">
@@ -1164,7 +1164,7 @@ select#execFilter:focus-visible{
   <!-- SECTION 3 -->
   <section class="block">
     <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Facturas nuevas</h2></div>
-    <p class="sec-desc">Listado de facturas agrupadas por empresa. “Disponibles” son las que aún no tienen financiera (se pueden ceder). “Cedidas” ya tienen un banco o fondo asignado. Puedes filtrar por estado, puntaje Warren, buscar por nombre y limitar por antigüedad de la factura (días desde su fecha).</p>
+    <p class="sec-desc">Inventario de facturas por empresa. <b>Disponibles:</b> sin financiera asignada, aptas para cesión. <b>Cedidas:</b> ya asignadas a un banco o fondo. Filtros disponibles: estado, puntaje Warren, búsqueda por nombre y antigüedad (días desde la fecha de la factura).</p>
     <div class="sec-filters" id="factFilters">
       <label for="factEstadoFilter">Estado</label>
       <select id="factEstadoFilter">
@@ -1199,7 +1199,7 @@ select#execFilter:focus-visible{
     </div>
     <div class="ctx-bar" id="ctxFacturas">
       <span class="ctx-pill" id="ctxFacturasPill">—</span>
-      <span class="ctx-text" id="ctxFacturasText">Disponibles = aún sin financiera. Cedidas = ya asignadas a un banco o fondo. Warren = puntaje de calidad (promedio; si dice “Sin registro” no se incluye en el cálculo).</span>
+      <span class="ctx-text" id="ctxFacturasText">Disponibles: sin financiera. Cedidas: con financiera asignada. Warren: puntaje de calidad (promedio; “Sin registro” se excluye del cálculo).</span>
     </div>
     <div class="card">
       <div class="table-scroll">
@@ -1213,15 +1213,15 @@ select#execFilter:focus-visible{
 
     <div class="card" style="margin-top:18px;">
       <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Segmentación Warren × cesión</h3>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Cruza el puntaje Warren de cada factura con su estado (disponible o ya cedida). Alto = 400 o más · Medio = 200 a 399 · Bajo = menos de 200 o sin dato. Así ves dónde está el riesgo y qué queda por ceder.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Matriz de calidad versus estado de cesión. <b>Alto:</b> Warren ≥ 400 · <b>Medio:</b> 200–399 · <b>Bajo:</b> &lt; 200 o sin dato. Permite priorizar qué stock ceder y dónde hay mayor riesgo.</p>
       <div class="seg-matrix" id="warrenSegMatrix"></div>
     </div>
 
     <div class="card" style="margin-top:18px;">
       <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Detalle de facturas (oportunidades)</h3>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Cada fila es una factura. El punto de color junto al nombre indica urgencia según la antigüedad (días desde la fecha de la factura). Las más críticas —cerca de vencer o ya muy antiguas— se marcan en rojo, sobre todo si aún están disponibles para ceder.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Detalle factura a factura. El indicador de color refleja la antigüedad (días desde la fecha de emisión). Priorice las marcadas en rojo cuando aún estén disponibles para cesión.</p>
       <div class="urg-legend" id="factUrgLegend">
-        <span><i class="urg-dot crit"></i> Crítica (≥ 25 días, priorizar)</span>
+        <span><i class="urg-dot crit"></i> Crítica (≥ 25 días)</span>
         <span><i class="urg-dot warn"></i> Atención (15–24 días)</span>
         <span><i class="urg-dot ok"></i> Al día (&lt; 15 días)</span>
         <span><i class="urg-dot na"></i> Sin fecha</span>
@@ -1255,10 +1255,10 @@ select#execFilter:focus-visible{
   <!-- COMISIONES -->
   <section class="block" id="secComisiones">
     <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Comisiones</h2></div>
-    <p class="sec-desc">Suma de las comisiones y gastos cobrados en las operaciones (comisión RC, gasto legal y gasto de operación). Sirve para ver cuánto se genera por estos conceptos. Respeta el filtro de ejecutivo.</p>
+    <p class="sec-desc">Total de comisiones y gastos asociados a las operaciones: comisión RC, gasto legal y gasto de operación. El desglose respeta el filtro de ejecutivo.</p>
     <div class="ctx-bar" id="ctxComisiones">
       <span class="ctx-pill" id="ctxComisionesPill">—</span>
-      <span class="ctx-text">Se toma de las columnas de comisión RC, gasto legal y gasto de operación del maestro de operaciones.</span>
+      <span class="ctx-text">Fuente: columnas de comisión RC, gasto legal y gasto de operación del maestro.</span>
     </div>
     <div class="card">
       <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
@@ -1280,10 +1280,10 @@ select#execFilter:focus-visible{
   <!-- SECTION 4: MORA / AGING -->
   <section class="block" id="secMora">
     <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Aging de mora</h2></div>
-    <p class="sec-desc">Clasifica las operaciones según cuántos días llevan vencidas. “Vigente” = todavía no vence. Luego: 0–15 días, 15–30, 31–60 y más de 60 días de atraso. El porcentaje indica qué parte del total está en cada tramo.</p>
+    <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente / por vencer:</b> aún no vencida. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. El porcentaje expresa la participación de cada tramo sobre el monto total.</p>
     <div class="ctx-bar" id="ctxMora">
       <span class="ctx-pill" id="ctxMoraPill">—</span>
-      <span class="ctx-text" id="ctxMoraText">Se calcula con los días de mora y los montos del maestro de operaciones. Respeta el filtro de ejecutivo.</span>
+      <span class="ctx-text" id="ctxMoraText">Fuente: días de mora y montos del maestro. Respeta el filtro de ejecutivo.</span>
     </div>
     <div class="card">
       <div class="sec-filters" id="moraFilters" style="margin-bottom:12px;">
@@ -1324,10 +1324,10 @@ select#execFilter:focus-visible{
   <!-- SECTION 5: CESIÓN -->
   <section class="block" id="secCesion">
     <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
-    <p class="sec-desc">Resume cuánto del stock de facturas está libre para ceder y cuánto ya se cedió a una financiera. El ranking muestra a qué bancos o fondos se está cediendo más.</p>
+    <p class="sec-desc">Estado del inventario de facturas: monto disponible para cesión versus monto ya cedido. El ranking identifica las financieras con mayor volumen asignado.</p>
     <div class="ctx-bar" id="ctxCesion">
       <span class="ctx-pill" id="ctxCesionPill">—</span>
-      <span class="ctx-text" id="ctxCesionText">Si la factura no tiene nombre de financiera (o dice “-”), se considera disponible para ceder.</span>
+      <span class="ctx-text" id="ctxCesionText">Sin nombre de financiera (o valor “-”) se clasifica como disponible para cesión.</span>
     </div>
     <div class="funnel-row">
       <div class="card">
@@ -1358,7 +1358,7 @@ select#execFilter:focus-visible{
   <!-- TAREAS -->
   <section class="block" id="secTareas">
     <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Lista de tareas</h2></div>
-    <p class="sec-desc">Las tareas se leen del archivo <code>tareas.csv</code> (misma carpeta que el dashboard). Gerencia puede agregar en pantalla o editar el CSV; cada ejecutivo solo ve las asignadas a su nombre.</p>
+    <p class="sec-desc">Pendientes operativos del equipo. La fuente es la hoja de tareas en Google Sheets. Gerencia asigna y administra; cada ejecutivo visualiza únicamente las tareas a su cargo.</p>
     <div class="card">
       <div class="task-filters">
         <label for="taskFilterEstado">Ver</label>
@@ -2770,7 +2770,7 @@ function renderConcentration(){
 
   const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
   if(!rows.length){
-    meters.innerHTML = '<p class="insight-empty">Sin operaciones en el maestro para calcular concentración de clientes.</p>';
+    meters.innerHTML = '<p class="insight-empty">No hay operaciones en el maestro para calcular la concentración de clientes.</p>';
     if(summary) summary.innerHTML = '';
     if(pill) pill.textContent = 'Sin datos';
     return { book:0, items:[], top1:0, top3:0, top5:0 };
@@ -2826,7 +2826,7 @@ function renderConcentration(){
   if(pill) pill.textContent = (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
 
   if(!items.length || book <= 0){
-    meters.innerHTML = '<p class="insight-empty">Sin montos de clientes en el maestro.</p>';
+    meters.innerHTML = '<p class="insight-empty">No hay montos de clientes disponibles en el maestro.</p>';
     if(summary) summary.innerHTML = '';
     return { book:0, items:[], top1:0, top3:0, top5:0 };
   }
@@ -2903,17 +2903,17 @@ function renderInsights(conc){
     if(pct >= 25){
       insights.push({
         type:'risk',
-        html: `<b>Alerta de concentración:</b> el cliente <b>${escapeHtml(top.nombre)}</b> concentra el <b>${pct.toFixed(1).replace('.',',')}%</b> del total adelantado (${fmtCLP(top.total)}). Superó el límite recomendado del 25%.`
+        html: `<b>Concentración elevada:</b> <b>${escapeHtml(top.nombre)}</b> representa el <b>${pct.toFixed(1).replace('.',',')}%</b> del monto anticipado (${fmtCLP(top.total)}), por sobre el umbral del 25%.`
       });
     } else if(pct >= 15){
       insights.push({
         type:'warn',
-        html: `<b>Concentración moderada:</b> el cliente líder (${escapeHtml(top.nombre)}) ya va en <b>${pct.toFixed(1).replace('.',',')}%</b> del book.`
+        html: `<b>Concentración media:</b> el principal cliente (${escapeHtml(top.nombre)}) concentra el <b>${pct.toFixed(1).replace('.',',')}%</b> del book.`
       });
     } else {
       insights.push({
         type:'ok',
-        html: `<b>Cartera bien repartida:</b> el cliente más grande representa solo el <b>${pct.toFixed(1).replace('.',',')}%</b> del total (bajo el 15%).`
+        html: `<b>Diversificación adecuada:</b> el mayor cliente representa el <b>${pct.toFixed(1).replace('.',',')}%</b> del total (bajo el 15%).`
       });
     }
   }
@@ -2932,20 +2932,20 @@ function renderInsights(conc){
       if(Math.abs(tPct) >= 8){
         insights.push({
           type: tPct > 0 ? 'ok' : 'warn',
-          html: `<b>Ticket promedio</b> en ${labelMonthShort(curYm)}: <b>${fmtCLP(ticket)}</b> (${tPct>0?'+':''}${tPct.toFixed(1).replace('.',',')}% vs ${labelMonthShort(prevYm)}).`
+          html: `<b>Ticket promedio</b> (${labelMonthShort(curYm)}): <b>${fmtCLP(ticket)}</b> · variación de ${tPct>0?'+':''}${tPct.toFixed(1).replace('.',',')}% respecto de ${labelMonthShort(prevYm)}.`
         });
       }
     }
     if(spread > 0){
       insights.push({
         type:'info',
-        html: `<b>Spread efectivo</b> del mes: <b>${spread.toFixed(2).replace('.',',')}%</b> (diferencia de precio ÷ monto anticipo).`
+        html: `<b>Margen efectivo del mes:</b> <b>${spread.toFixed(2).replace('.',',')}%</b> (diferencia de precio sobre monto anticipado).`
       });
     }
   } else {
     insights.push({
       type:'warn',
-      html: `<b>No hay operaciones</b> registradas en ${labelMonth(curYm)} con el filtro actual.`
+      html: `<b>Sin operaciones</b> en ${labelMonth(curYm)} para el filtro seleccionado.`
     });
   }
 
@@ -2957,7 +2957,7 @@ function renderInsights(conc){
   if(sinWarren.length){
     insights.push({
       type:'warn',
-      html: `<b>${sinWarren.length} empresa(s)</b> no tienen puntaje Warren numérico y suman <b>${fmtCLP(montoSin)}</b>. Conviene revisar esos datos antes de asignar cupos.`
+      html: `<b>${sinWarren.length} empresa(s)</b> sin puntaje Warren numérico, por un monto de <b>${fmtCLP(montoSin)}</b>. Se recomienda completar esa información antes de definir cupos.`
     });
   }
 
@@ -2969,8 +2969,8 @@ function renderInsights(conc){
     const pDisp = (disp / tot) * 100;
     insights.push({
       type: pDisp >= 60 ? 'warn' : 'info',
-      html: `<b>Inventario de facturas:</b> ${fmtCLP(disp)} todavía disponibles para ceder (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas a una financiera. `
-        + (pDisp >= 60 ? 'Hay bastante stock pendiente de ceder.' : 'La mayor parte ya tiene financiera asignada.')
+      html: `<b>Inventario de facturas:</b> ${fmtCLP(disp)} disponibles para cesión (${pDisp.toFixed(0)}%) y ${fmtCLP(ced)} ya cedidas. `
+        + (pDisp >= 60 ? 'El stock disponible es elevado respecto del total.' : 'La mayor parte del inventario ya tiene financiera asignada.')
     });
   }
 
@@ -2985,7 +2985,7 @@ function renderInsights(conc){
     if(best && best.monto > 0){
       insights.push({
         type:'info',
-        html: `<b>Quién más adelantó este mes:</b> ${escapeHtml(best.e)} con <b>${fmtCLP(best.monto)}</b> en ${best.ops} operación(es).`
+        html: `<b>Mayor volumen del mes:</b> ${escapeHtml(best.e)} · <b>${fmtCLP(best.monto)}</b> en ${best.ops} operación(es).`
       });
     }
   }
@@ -2993,7 +2993,7 @@ function renderInsights(conc){
   if(pill) pill.textContent = insights.length + ' lectura(s) · ' + filterLabel();
 
   if(!insights.length){
-    list.innerHTML = '<li class="insight-empty">No hay señales destacadas con los datos actuales.</li>';
+    list.innerHTML = '<li class="insight-empty">No hay hallazgos destacados con los datos y filtros actuales.</li>';
     return;
   }
 
@@ -4022,7 +4022,7 @@ function applyRoleToTasksUI(){
     if(btnExp) btnExp.style.display = '';
     if(desc){
       const quien = SESSION.ejecutivoKey || SESSION.nombre;
-      desc.textContent = 'Solo ves las tareas asignadas a ' + quien + '. Puedes marcarlas como hechas. Solo gerencia puede crear o asignar tareas nuevas.';
+      desc.textContent = 'Tareas asignadas a ' + quien + '. Puede marcar su cumplimiento. La creación y asignación corresponde a gerencia.';
     }
   } else {
     // Gerencia (o sin sesión): puede gestionar todo
@@ -4035,7 +4035,7 @@ function applyRoleToTasksUI(){
       execEl.style.opacity = '';
     }
     if(desc){
-      desc.innerHTML = 'Gerencia crea y asigna tareas a cada ejecutivo. Cada ejecutivo, al entrar, solo ve las suyas. Formato CSV: <code>tareas.csv</code>.';
+      desc.innerHTML = 'Gestión de pendientes del equipo. Gerencia crea y asigna; cada ejecutivo visualiza solo las suyas. Fuente: hoja de tareas en Google Sheets.';
     }
   }
   renderTasks();
