@@ -144,7 +144,29 @@
   }
 
   /* ---------- SECTIONS ---------- */
-  section.block{margin-top:52px;}
+  section.block{margin-top:28px;}
+
+  .cluster-label{
+    margin: 40px 0 8px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, rgba(0,97,164,0.08), rgba(0,128,200,0.04));
+    border: 1px solid var(--cloud);
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px;
+  }
+  .cluster-kicker{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--blue); font-weight: 600;
+  }
+  .cluster-name{
+    font-family: 'Fraunces', serif;
+    font-size: 16px; font-weight: 600; color: var(--navy-deep);
+  }
+  .cluster-hint{
+    font-size: 12.5px; color: var(--ink-soft); flex: 1 1 200px;
+  }
+
   .sec-head{display:flex; align-items:center; gap:12px; margin-bottom:8px;}
   .sec-num{
     font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600;
@@ -1170,38 +1192,63 @@ select#execFilter:focus-visible{
     <div class="notes" id="notesGeneral"></div>
   </section>
 
-  <!-- SECTION 2 -->
-  <section class="block">
-    <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Mes en curso</h2></div>
-    <p class="sec-desc" id="mesCursoDesc">Comparativo del mes en curso entre ejecutivos: volumen anticipado y diferencia de precio generada. Los gráficos utilizan los mismos montos de la tabla.</p>
-    <div class="ctx-bar" id="ctxMesCurso">
-      <span class="ctx-pill" id="ctxMesCursoPill">—</span>
-      <span class="ctx-text" id="ctxMesCursoText">Incluye únicamente operaciones con fecha de creación en el mes indicado.</span>
+  
+
+  <div class="cluster-label" role="presentation">
+    <span class="cluster-kicker">Cluster de prioridad</span>
+    <span class="cluster-name">Riesgo y calidad de cartera</span>
+    <span class="cluster-hint">Prioridad para proteger el book y anticipar deterioro.</span>
+  </div>
+
+<section class="block" id="secMora">
+    <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Aging de mora</h2></div>
+    <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente / por vencer:</b> aún no vencida. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. El porcentaje expresa la participación de cada tramo sobre el monto total.</p>
+    <div class="ctx-bar" id="ctxMora">
+      <span class="ctx-pill" id="ctxMoraPill">—</span>
+      <span class="ctx-text" id="ctxMoraText">Fuente: días de mora y montos del maestro. Respeta el filtro de ejecutivo.</span>
     </div>
     <div class="card">
-      <div class="table-scroll">
-        <table id="tbl-mescurso"></table>
+      <div class="sec-filters" id="moraFilters" style="margin-bottom:12px;">
+        <label for="moraTramoFilter">Ver tramo de mora</label>
+        <select id="moraTramoFilter">
+          <option value="ALL">Todos los tramos</option>
+          <option value="vigente">Vigente</option>
+          <option value="m015">Mora 0–15</option>
+          <option value="m1530">Mora 15–30</option>
+          <option value="m2">Mora 31–60</option>
+          <option value="m3">Mora 60+</option>
+        </select>
       </div>
-    </div>
-    <div class="chart-grid">
-      <div class="card chart-card">
-        <h3>Monto de anticipo / financiamiento por ejecutivo</h3>
-        <p class="chart-sub">Ordenados de mayor a menor, usando el mismo mes de la tabla de arriba.</p>
-        <div id="chart-monto"></div>
+
+      <div class="mora-pct-banner" id="moraPctBanner"></div>
+      <div class="mora-grid" id="moraTiles"></div>
+      <div class="mora-table-wrap">
+        <table id="tbl-mora">
+          <thead>
+            <tr>
+              <th class="left">Tramo</th>
+              <th>Operaciones</th>
+              <th>Monto (CLP)</th>
+              <th>% del book</th>
+              <th class="left">Comportamiento</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
-      <div class="card chart-card">
-        <h3>Diferencia de precio por ejecutivo</h3>
-        <p class="chart-sub">Ordenados de mayor a menor, usando el mismo mes de la tabla de arriba.</p>
-        <div id="chart-dif"></div>
+      <div class="mora-actions">
+        <button type="button" id="btnDownloadMora" class="btn-refresh" title="Descargar el desglose de mora en CSV">⬇ Descargar mora (CSV)</button>
       </div>
-    </div>
-    <div class="chart-download-row">
-      <button type="button" id="btnDownloadCharts" class="btn-refresh" title="Descargar los datos de estos gráficos en CSV">⬇ Descargar datos de gráficos (CSV)</button>
     </div>
   </section>
 
-  <!-- SECTION 3 -->
-  <section class="block">
+  <div class="cluster-label" role="presentation">
+    <span class="cluster-kicker">Cluster de prioridad</span>
+    <span class="cluster-name">Pipeline comercial</span>
+    <span class="cluster-hint">Oportunidades de anticipo y stock disponible para ceder.</span>
+  </div>
+
+<section class="block">
     <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Facturas nuevas</h2></div>
     <p class="sec-desc">Inventario de facturas por empresa. <b>Disponibles:</b> sin financiera asignada, aptas para cesión. <b>Cedidas:</b> ya asignadas a un banco o fondo. Filtros disponibles: estado, puntaje Warren, búsqueda por nombre y antigüedad (días desde la fecha de la factura).</p>
     <div class="sec-filters" id="factFilters">
@@ -1288,81 +1335,8 @@ select#execFilter:focus-visible{
       </div>
     </div>
   </section>
-
-  
-  
-  <!-- COMISIONES -->
-  <section class="block" id="secComisiones">
-    <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Comisiones</h2></div>
-    <p class="sec-desc">Total de comisiones y gastos asociados a las operaciones: comisión RC, gasto legal y gasto de operación. El desglose respeta el filtro de ejecutivo.</p>
-    <div class="ctx-bar" id="ctxComisiones">
-      <span class="ctx-pill" id="ctxComisionesPill">—</span>
-      <span class="ctx-text">Fuente: columnas de comisión RC, gasto legal y gasto de operación del maestro.</span>
-    </div>
-    <div class="card">
-      <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
-      <div class="mora-table-wrap" style="margin-top:12px;">
-        <table id="tbl-comisiones">
-          <thead>
-            <tr>
-              <th class="left">Concepto</th>
-              <th>Operaciones</th>
-              <th>Monto (CLP)</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 4: MORA / AGING -->
-  <section class="block" id="secMora">
-    <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Aging de mora</h2></div>
-    <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente / por vencer:</b> aún no vencida. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. El porcentaje expresa la participación de cada tramo sobre el monto total.</p>
-    <div class="ctx-bar" id="ctxMora">
-      <span class="ctx-pill" id="ctxMoraPill">—</span>
-      <span class="ctx-text" id="ctxMoraText">Fuente: días de mora y montos del maestro. Respeta el filtro de ejecutivo.</span>
-    </div>
-    <div class="card">
-      <div class="sec-filters" id="moraFilters" style="margin-bottom:12px;">
-        <label for="moraTramoFilter">Ver tramo de mora</label>
-        <select id="moraTramoFilter">
-          <option value="ALL">Todos los tramos</option>
-          <option value="vigente">Vigente</option>
-          <option value="m015">Mora 0–15</option>
-          <option value="m1530">Mora 15–30</option>
-          <option value="m2">Mora 31–60</option>
-          <option value="m3">Mora 60+</option>
-        </select>
-      </div>
-
-      <div class="mora-pct-banner" id="moraPctBanner"></div>
-      <div class="mora-grid" id="moraTiles"></div>
-      <div class="mora-table-wrap">
-        <table id="tbl-mora">
-          <thead>
-            <tr>
-              <th class="left">Tramo</th>
-              <th>Operaciones</th>
-              <th>Monto (CLP)</th>
-              <th>% del book</th>
-              <th class="left">Comportamiento</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="mora-actions">
-        <button type="button" id="btnDownloadMora" class="btn-refresh" title="Descargar el desglose de mora en CSV">⬇ Descargar mora (CSV)</button>
-      </div>
-    </div>
-  </section>
-
-
-  <!-- SECTION 5: CESIÓN -->
-  <section class="block" id="secCesion">
-    <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
+<section class="block" id="secCesion">
+    <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
     <p class="sec-desc">Estado del inventario de facturas: monto disponible para cesión versus monto ya cedido. El ranking identifica las financieras con mayor volumen asignado.</p>
     <div class="ctx-bar" id="ctxCesion">
       <span class="ctx-pill" id="ctxCesionPill">—</span>
@@ -1393,9 +1367,71 @@ select#execFilter:focus-visible{
     </div>
   </section>
 
+  <div class="cluster-label" role="presentation">
+    <span class="cluster-kicker">Cluster de prioridad</span>
+    <span class="cluster-name">Desempeño y rentabilidad</span>
+    <span class="cluster-hint">Resultado comercial del periodo y generación de margen.</span>
+  </div>
 
-  <!-- TAREAS -->
-  <section class="block" id="secTareas">
+<section class="block">
+    <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Mes en curso</h2></div>
+    <p class="sec-desc" id="mesCursoDesc">Comparativo del mes en curso entre ejecutivos: volumen anticipado y diferencia de precio generada. Los gráficos utilizan los mismos montos de la tabla.</p>
+    <div class="ctx-bar" id="ctxMesCurso">
+      <span class="ctx-pill" id="ctxMesCursoPill">—</span>
+      <span class="ctx-text" id="ctxMesCursoText">Incluye únicamente operaciones con fecha de creación en el mes indicado.</span>
+    </div>
+    <div class="card">
+      <div class="table-scroll">
+        <table id="tbl-mescurso"></table>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="card chart-card">
+        <h3>Monto de anticipo / financiamiento por ejecutivo</h3>
+        <p class="chart-sub">Ordenados de mayor a menor, usando el mismo mes de la tabla de arriba.</p>
+        <div id="chart-monto"></div>
+      </div>
+      <div class="card chart-card">
+        <h3>Diferencia de precio por ejecutivo</h3>
+        <p class="chart-sub">Ordenados de mayor a menor, usando el mismo mes de la tabla de arriba.</p>
+        <div id="chart-dif"></div>
+      </div>
+    </div>
+    <div class="chart-download-row">
+      <button type="button" id="btnDownloadCharts" class="btn-refresh" title="Descargar los datos de estos gráficos en CSV">⬇ Descargar datos de gráficos (CSV)</button>
+    </div>
+  </section>
+<section class="block" id="secComisiones">
+    <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Comisiones</h2></div>
+    <p class="sec-desc">Total de comisiones y gastos asociados a las operaciones: comisión RC, gasto legal y gasto de operación. El desglose respeta el filtro de ejecutivo.</p>
+    <div class="ctx-bar" id="ctxComisiones">
+      <span class="ctx-pill" id="ctxComisionesPill">—</span>
+      <span class="ctx-text">Fuente: columnas de comisión RC, gasto legal y gasto de operación del maestro.</span>
+    </div>
+    <div class="card">
+      <div class="mora-grid" id="comisionTiles" style="grid-template-columns:repeat(2,1fr);"></div>
+      <div class="mora-table-wrap" style="margin-top:12px;">
+        <table id="tbl-comisiones">
+          <thead>
+            <tr>
+              <th class="left">Concepto</th>
+              <th>Operaciones</th>
+              <th>Monto (CLP)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="cluster-label" role="presentation">
+    <span class="cluster-kicker">Cluster de prioridad</span>
+    <span class="cluster-name">Gestión y seguimiento</span>
+    <span class="cluster-hint">Pendientes operativos del equipo.</span>
+  </div>
+
+<section class="block" id="secTareas">
     <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Lista de tareas</h2></div>
     <p class="sec-desc">Pendientes operativos del equipo. La fuente es la hoja de tareas en Google Sheets. Gerencia asigna y administra; cada ejecutivo visualiza únicamente las tareas a su cargo.</p>
     <div class="card">
@@ -1436,6 +1472,27 @@ select#execFilter:focus-visible{
       </div>
     </div>
   </section>
+<!-- SECTION 2 -->
+  
+
+  <!-- SECTION 3 -->
+  
+
+  
+  
+  <!-- COMISIONES -->
+  
+
+  <!-- SECTION 4: MORA / AGING -->
+  
+
+
+  <!-- SECTION 5: CESIÓN -->
+  
+
+
+  <!-- TAREAS -->
+  
 
 <footer>Montos en pesos chilenos (CLP), sin decimales. Uso interno — Acqua Capital.</footer>
 </div>
