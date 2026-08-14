@@ -1915,6 +1915,8 @@ function buildData(masterRows, facturaRows, selectedYear){
 
   const seenNuevoAcc = {};
   const seenNuevoAccTot = {};
+  const seenNuevoMonth = {}; // key: e|ym|cli o tot|ym|cli — evita contar 2 veces si el cliente tiene
+                              // más de una operación el mismo día de su primera operación.
   const seenActiveMonth = {}; // key: e|ym|cli or tot|ym|cli
 
   masterRows.forEach(r => {
@@ -1938,8 +1940,16 @@ function buildData(masterRows, facturaRows, selectedYear){
 
     const cell = summary.ejecutivos[e].months[ym];
     if(esPrimera && cliName){
-      cell.clientes_nuevos += 1;
-      summary.total.months[ym].clientes_nuevos += 1;
+      const kNE = e + '|' + ym + '|' + cliName;
+      const kNT = 'tot|' + ym + '|' + cliName;
+      if(!seenNuevoMonth[kNE]){
+        seenNuevoMonth[kNE] = true;
+        cell.clientes_nuevos += 1;
+      }
+      if(!seenNuevoMonth[kNT]){
+        seenNuevoMonth[kNT] = true;
+        summary.total.months[ym].clientes_nuevos += 1;
+      }
       if(!seenNuevoAcc[e + '|' + cliName]){
         seenNuevoAcc[e + '|' + cliName] = true;
         summary.ejecutivos[e].accum.clientes_nuevos += 1;
