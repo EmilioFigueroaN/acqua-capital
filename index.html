@@ -1426,19 +1426,6 @@ select#execFilter:focus-visible{
           <option value="baja">Baja</option>
         </select>
       </div>
-      <div class="task-toolbar">
-        <input type="text" id="taskNewText" placeholder="Nueva tarea…" maxlength="300" aria-label="Texto de la nueva tarea">
-        <select id="taskNewPrio" aria-label="Prioridad">
-          <option value="media">Media</option>
-          <option value="alta">Alta</option>
-          <option value="baja">Baja</option>
-        </select>
-        <select id="taskNewExec" aria-label="Asignar a ejecutivo">
-          <option value="">Sin asignar</option>
-        </select>
-        <input type="date" id="taskNewFecha" aria-label="Fecha límite">
-        <button type="button" class="btn-refresh" id="btnTaskAdd">+ Agregar</button>
-      </div>
       <ul class="task-list" id="taskList" aria-label="Tareas"></ul>
       <div class="chart-download-row" style="margin-top:14px; gap:10px; flex-wrap:wrap;">
         <button type="button" id="btnTaskExport" class="btn-refresh" title="Descargar tareas en CSV">⬇ Exportar tareas (CSV)</button>
