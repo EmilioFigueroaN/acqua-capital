@@ -1052,8 +1052,16 @@ select#execFilter:focus-visible{
   .task-actions button:hover{ color:var(--ink); border-color:var(--ink-soft); }
   .task-actions button.danger:hover{ color:#c04545; border-color:#f0c4c4; }
   .task-empty{ font-size:13.5px; color:#6b7a8c; padding:16px; text-align:center; }
-  .task-filters{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+  .task-filters{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin-bottom:12px; }
   .task-filters label{ font-size:12px; color:var(--ink-soft); font-weight:600; }
+  .task-filters select{
+    font-family:'Inter',sans-serif; font-size:13.5px; font-weight:600;
+    padding:7px 32px 7px 11px; border-radius:8px; border:1.5px solid var(--line);
+    background:var(--paper) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><path d="M1 1l5 5 5-5" stroke="%23151b2b" stroke-width="1.6" fill="none"/></svg>') no-repeat right 10px center;
+    appearance:none; -webkit-appearance:none; color:var(--ink); cursor:pointer;
+  }
+  .task-filters select:focus-visible{ outline:2px solid var(--focus-ring); outline-offset:1px; }
+  .task-filters select:disabled{ opacity:.75; cursor:default; }
 
 </style>
 </head>
@@ -1434,6 +1442,10 @@ select#execFilter:focus-visible{
     <p class="sec-desc">Pendientes operativos del equipo. La fuente es la hoja de tareas en Google Sheets. Gerencia asigna y administra; cada ejecutivo visualiza únicamente las tareas a su cargo.</p>
     <div class="card">
       <div class="task-filters">
+        <label for="taskFilterExec">Ejecutivo</label>
+        <select id="taskFilterExec" aria-label="Filtrar tareas por ejecutivo">
+          <option value="ALL">Todos los ejecutivos</option>
+        </select>
         <label for="taskFilterEstado">Ver</label>
         <select id="taskFilterEstado" aria-label="Filtrar tareas por estado">
           <option value="ALL">Todas</option>
@@ -4016,10 +4028,15 @@ function taskVisibleForSession(t){
 function renderTasks(){
   const list = document.getElementById('taskList');
   if(!list) return;
+  const taskExec = document.getElementById('taskFilterExec')?.value || 'ALL';
   const est = document.getElementById('taskFilterEstado')?.value || 'ALL';
   const prio = document.getElementById('taskFilterPrio')?.value || 'ALL';
 
   let rows = TASKS.filter(taskVisibleForSession);
+  if(taskExec !== 'ALL'){
+    const wantedExec = normalizeName(taskExec);
+    rows = rows.filter(t => normalizeName(t.ejecutivo || '') === wantedExec);
+  }
   if(est === 'pendiente') rows = rows.filter(t => t.estado !== 'hecha');
   if(est === 'hecha') rows = rows.filter(t => t.estado === 'hecha');
   if(prio !== 'ALL') rows = rows.filter(t => (t.prioridad || 'media') === prio);
@@ -4215,6 +4232,7 @@ function importTasksFromFile(file){
         });
       }
       saveTasks();
+      fillTaskExecFilter();
       renderTasks();
       alert('Tareas importadas: ' + parsed.length);
     }catch(err){
@@ -4257,8 +4275,52 @@ function fillTaskExecSelect(){
   if(prev && list.indexOf(prev) !== -1) sel.value = prev;
 }
 
+function fillTaskExecFilter(){
+  const sel = document.getElementById('taskFilterExec');
+  if(!sel || sel.tagName !== 'SELECT') return;
+
+  // Ejecutivo: mismo criterio del filtro general, queda bloqueado en su propia cartera.
+  if(isEjecutivo() && SESSION){
+    const own = (SESSION.ejecutivoKey || SESSION.nombre || '').trim();
+    sel.innerHTML = own
+      ? `<option value="${escapeHtml(own)}">${escapeHtml(own)}</option>`
+      : '<option value="ALL">Tus tareas</option>';
+    sel.value = own || 'ALL';
+    sel.disabled = true;
+    return;
+  }
+
+  const prev = sel.value || 'ALL';
+  const names = new Set();
+  if(DATA && Array.isArray(DATA.ejecutivos)){
+    DATA.ejecutivos.forEach(e => { if(e) names.add(String(e).trim()); });
+  }
+  if(typeof USERS !== 'undefined' && Array.isArray(USERS)){
+    USERS.forEach(u => {
+      if(u.rol === 'ejecutivo'){
+        const k = (u.ejecutivoKey || u.nombre || '').trim();
+        if(k) names.add(k);
+      }
+    });
+  }
+  if(Array.isArray(TASKS)){
+    TASKS.forEach(t => {
+      const e = (t.ejecutivo || '').trim();
+      if(e) names.add(e);
+    });
+  }
+
+  const list = Array.from(names).filter(Boolean).sort((a,b) => a.localeCompare(b, 'es'));
+  sel.innerHTML = '<option value="ALL">Todos los ejecutivos</option>' +
+    list.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
+  sel.disabled = false;
+  if(prev === 'ALL' || list.indexOf(prev) !== -1) sel.value = prev;
+  else sel.value = 'ALL';
+}
+
 function applyRoleToTasksUI(){
   fillTaskExecSelect();
+  fillTaskExecFilter();
   const toolbar = document.querySelector('#secTareas .task-toolbar');
   const execEl = document.getElementById('taskNewExec');
   const desc = document.querySelector('#secTareas .sec-desc');
@@ -4423,7 +4485,7 @@ function wireTasksUI(){
     list.addEventListener('click', onTaskListClick);
     list.addEventListener('change', onTaskListChange);
   }
-  ['taskFilterEstado','taskFilterPrio'].forEach(id => {
+  ['taskFilterExec','taskFilterEstado','taskFilterPrio'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener('change', renderTasks);
   });
@@ -4469,6 +4531,7 @@ function wireTasksUI(){
 function renderAll(){
   if(!DATA) return;
   fillTaskExecSelect();
+  fillTaskExecFilter();
   renderKpis();
   updateContextBars();
   renderIntel();
