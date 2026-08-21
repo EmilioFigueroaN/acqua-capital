@@ -5000,7 +5000,10 @@ function parseTasksCSV(text){
     const tarea = (cols[iTar] || '').trim();
     if(!tarea) continue;
     let estado = (iEst >= 0 ? cols[iEst] : 'pendiente') || 'pendiente';
-    estado = /^hech/i.test(estado) || /^done$/i.test(estado) || estado === '1' ? 'hecha' : 'pendiente';
+    estado = String(estado).trim().toLowerCase();
+    estado = /^hech/.test(estado) || estado === 'done' || estado === '1' || estado === 'true'
+      ? 'hecha'
+      : 'pendiente';
     let prioridad = (iPrio >= 0 ? cols[iPrio] : 'media') || 'media';
     prioridad = prioridad.toLowerCase();
     if(!['alta','media','baja'].includes(prioridad)) prioridad = 'media';
@@ -5174,60 +5177,58 @@ function applyRoleToTasksUI(){
 }
 
 
-const TASKS_STATUS_KEY = 'acqua_factoring_tareas_status_v1'; // solo estado hecha/pendiente por id
+const TASKS_STATUS_KEY = 'acqua_factoring_tareas_status_v1';
+
+/*
+ * Las tareas son de SOLO LECTURA.
+ * Google Sheets es la única fuente de verdad para "estado".
+ * Se eliminan estados antiguos guardados por versiones previas del dashboard
+ * para impedir que localStorage sobreescriba valores como "hecha"/"pendiente".
+ */
+function clearLegacyTaskStatusOverrides(){
+  try{
+    localStorage.removeItem(TASKS_STATUS_KEY);
+    localStorage.removeItem(TASKS_KEY);
+  }catch(e){}
+}
 
 function loadStatusOverrides(){
-  try{
-    const raw = localStorage.getItem(TASKS_STATUS_KEY);
-    if(raw){
-      const o = JSON.parse(raw);
-      if(o && typeof o === 'object') return o;
-    }
-  }catch(e){}
   return {};
 }
 
-function saveStatusOverrides(map){
-  try{ localStorage.setItem(TASKS_STATUS_KEY, JSON.stringify(map || {})); }catch(e){}
+function saveStatusOverrides(){
+  // Sin persistencia local: el estado vive exclusivamente en Google Sheets.
 }
 
 function applyStatusOverrides(tasks){
-  const map = loadStatusOverrides();
-  tasks.forEach(t => {
-    if(t.id && map[t.id]) t.estado = map[t.id];
-  });
-  return tasks;
+  return Array.isArray(tasks) ? tasks : [];
 }
 
-function setTaskStatus(id, estado){
-  const map = loadStatusOverrides();
-  map[id] = estado;
-  saveStatusOverrides(map);
+function setTaskStatus(){
+  // Solo lectura: cualquier modificación debe hacerse en Google Sheets.
 }
 
-/** Lee siempre tareas.csv del servidor/carpeta del dashboard. */
+/** Lee siempre la hoja de tareas y respeta exactamente su columna "estado". */
 async function loadTasksFromCSVFile(){
   try{
+    clearLegacyTaskStatusOverrides();
     const res = await fetch(csvUrl(CSV_TAREAS), { cache: 'no-store' });
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     const parsed = parseTasksCSV(text);
-    TASKS = applyStatusOverrides(parsed);
+    TASKS = parsed;
     return true;
   }catch(e){
-    console.warn('No se pudo leer tareas.csv', e);
-    TASKS = applyStatusOverrides(TASKS || []);
+    console.warn('No se pudo leer la hoja de tareas', e);
+    // Si falla una actualización, conservar la última lectura válida de esta sesión,
+    // pero nunca aplicar estados guardados localmente.
+    TASKS = Array.isArray(TASKS) ? TASKS : [];
     return false;
   }
 }
 
 function saveTasks(){
-  // Persistimos solo el estado hecha/pendiente (el listado vive en tareas.csv)
-  const map = loadStatusOverrides();
-  TASKS.forEach(t => {
-    if(t.id) map[t.id] = t.estado || 'pendiente';
-  });
-  saveStatusOverrides(map);
+  // Solo lectura: no se guarda estado de tareas en el navegador.
 }
 
 async function reloadTasksAndRender(){
@@ -5629,7 +5630,7 @@ async function checkCsvUpdates(silent){
       if(typeof loadTasksFromCSVFile === 'function'){
         await loadTasksFromCSVFile();
         if(typeof applyRoleToTasksUI === 'function') applyRoleToTasksUI();
-        setStatus('Tareas actualizadas desde tareas.csv · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
+        setStatus('Tareas actualizadas desde Google Sheets · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
       }
     } else if(changedUsers){
       if(typeof loadUsers === 'function') await loadUsers();
