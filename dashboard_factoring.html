@@ -1351,6 +1351,11 @@ select#execFilter:focus-visible{
         <option value="bajo">Bajo (&lt; 200)</option>
         <option value="sin">Sin dato</option>
       </select>
+      <label for="factWarrenSort">Orden Warren</label>
+      <select id="factWarrenSort" aria-label="Ordenar Warren promedio">
+        <option value="desc">Mayor a menor</option>
+        <option value="asc">Menor a mayor</option>
+      </select>
       <label for="factSearch">Buscar</label>
       <input type="search" id="factSearch" placeholder="Buscar empresa o deudor…" style="font-family:inherit;font-size:13px;padding:6px 10px;border:1.5px solid var(--line);border-radius:8px;min-width:180px;">
       <div class="age-filter-wrap" title="Muestra solo facturas emitidas en los últimos N días. Pon 0 para ver todas, sin límite de antigüedad.">
@@ -2735,13 +2740,17 @@ function renderFacturas(){
     if(currentExec !== 'ALL') rows = rows.filter(r => r.ejecutivo === currentExec);
   }
 
+  const warrenSortDir = filters.warrenSort === 'asc' ? 'asc' : 'desc';
   rows.sort((a,b) => {
     const aN = a.promedio_warren === null || a.promedio_warren === undefined;
     const bN = b.promedio_warren === null || b.promedio_warren === undefined;
-    if(aN && bN) return 0;
+    // Los registros sin Warren se mantienen al final en ambos sentidos.
+    if(aN && bN) return String(a.razon_social || '').localeCompare(String(b.razon_social || ''), 'es', { sensitivity:'base' });
     if(aN) return 1;
     if(bN) return -1;
-    return b.promedio_warren - a.promedio_warren;
+    const diff = Number(a.promedio_warren) - Number(b.promedio_warren);
+    if(diff === 0) return String(a.razon_social || '').localeCompare(String(b.razon_social || ''), 'es', { sensitivity:'base' });
+    return warrenSortDir === 'asc' ? diff : -diff;
   });
 
   const totals = {disponibles:0, cedidas:0};
@@ -4129,6 +4138,7 @@ function getFactSectionFilters(){
   return {
     estado: document.getElementById('factEstadoFilter')?.value || 'ALL',
     warren: document.getElementById('factWarrenFilter')?.value || 'ALL',
+    warrenSort: document.getElementById('factWarrenSort')?.value || 'desc',
     search: (document.getElementById('factSearch')?.value || '').trim().toLowerCase(),
     ageMax: ageMax, // 0 = sin límite
     urgencia: document.getElementById('factUrgFilter')?.value || 'ALL'
@@ -5437,7 +5447,7 @@ if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', down
 function refreshFacturasSection(){
   if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderExcedenteRetenido(); renderCesion(); }
 }
-['factEstadoFilter','factWarrenFilter','factUrgFilter'].forEach(id => {
+['factEstadoFilter','factWarrenFilter','factWarrenSort','factUrgFilter'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', refreshFacturasSection);
 });
