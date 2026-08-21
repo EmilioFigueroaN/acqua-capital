@@ -746,9 +746,37 @@ select#execFilter:focus-visible{
   .mora-fill.m015{ background:var(--celeste); }
   .mora-fill.m1530{ background:#c45c2a; }
   .mora-pct-banner{
-    display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px;
-    margin-bottom:14px; padding:12px 16px;
-    background:var(--celeste-soft); border:1px solid #b8d9f0; border-radius:12px;
+    display:grid;
+    grid-template-columns:minmax(150px,.75fr) repeat(3,minmax(150px,1fr));
+    gap:10px 14px;
+    align-items:stretch;
+    margin-bottom:14px;
+    padding:14px 16px;
+    background:linear-gradient(135deg, #e8f5fc 0%, #f4f9fd 100%);
+    border:1px solid #b8d9f0;
+    border-radius:12px;
+  }
+  @media (max-width:900px){
+    .mora-pct-banner{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
+  @media (max-width:540px){
+    .mora-pct-banner{ grid-template-columns:1fr; }
+  }
+  .mora-pct-banner .mp-main,
+  .mora-pct-banner .mp-stat{
+    min-width:0;
+    padding:10px 12px;
+    border-radius:10px;
+    background:rgba(255,255,255,.68);
+    border:1px solid rgba(184,217,240,.72);
+  }
+  .mora-pct-banner .mp-stat-value{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink);
+    margin-top:4px;
+    overflow-wrap:anywhere;
   }
   .mora-pct-banner .mp-label{
     font-size:11px; font-weight:600; text-transform:uppercase;
@@ -1329,10 +1357,10 @@ select#execFilter:focus-visible{
 
 <section class="block" id="secMora">
     <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Aging de mora</h2></div>
-    <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente / por vencer:</b> aún no vencida. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. El porcentaje expresa la participación de cada tramo sobre el monto total.</p>
+    <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente:</b> facturas sin mora. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. <b>Monto</b> corresponde a (33) Monto a financiar, <b>% de la cartera</b> es la participación de cada tramo sobre la cartera total e <b>Interés mora</b> corresponde a (68) Interes Mora.</p>
     <div class="ctx-bar" id="ctxMora">
       <span class="ctx-pill" id="ctxMoraPill">—</span>
-      <span class="ctx-text" id="ctxMoraText">Fuente: días de mora y montos del maestro. Respeta el filtro de ejecutivo.</span>
+      <span class="ctx-text" id="ctxMoraText">Fuente: (19) Días de mora, (33) Monto a financiar y (68) Interes Mora. Respeta el filtro de ejecutivo.</span>
     </div>
     <div class="card">
       <div class="sec-filters" id="moraFilters" style="margin-bottom:12px;">
@@ -1354,10 +1382,10 @@ select#execFilter:focus-visible{
           <thead>
             <tr>
               <th class="left">Tramo</th>
-              <th>Operaciones</th>
+              <th>Facturas</th>
               <th>Monto (CLP)</th>
-              <th>% del book</th>
-              <th class="left">Comportamiento</th>
+              <th>% de la cartera</th>
+              <th>Interés mora</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -3789,13 +3817,11 @@ function renderMora(){
 
   const sample = masterRowsCache[0] || {};
   const keys = Object.keys(sample);
-  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k));
   const colDias = keys.find(k => /d[ií]as\s*de\s*mora/i.test(k) || /\(19\)/.test(k));
-  const colComp = keys.find(k => /comportamiento/i.test(k) || /\(18\)/.test(k));
   const masterSchema = resolveMasterSchema(masterRowsCache);
 
   if(!colDias){
-    tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">No se encontró la columna de días de mora en el maestro.</p>';
+    tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">No se encontró la columna (19) Días de mora en el maestro.</p>';
     tbody.innerHTML = '';
     if(banner) banner.innerHTML = '';
     window._moraExportRows = null;
@@ -3803,11 +3829,11 @@ function renderMora(){
   }
 
   const buckets = {
-    vigente: { key:'vigente', label:'Vigente / por vencer', cls:'vigente', ops:0, monto:0, comps:{}, empresas:{} },
-    m015:    { key:'m015', label:'Mora 0 – 15 días', cls:'m015', ops:0, monto:0, comps:{}, empresas:{} },
-    m1530:   { key:'m1530', label:'Mora 15 – 30 días', cls:'m1530', ops:0, monto:0, comps:{}, empresas:{} },
-    m2:      { key:'m2', label:'Mora 31 – 60 días', cls:'m2', ops:0, monto:0, comps:{}, empresas:{} },
-    m3:      { key:'m3', label:'Mora 60+ días', cls:'m3', ops:0, monto:0, comps:{}, empresas:{} }
+    vigente: { key:'vigente', label:'Vigente', cls:'vigente', facturas:0, monto:0, interesMora:0, empresas:{} },
+    m015:    { key:'m015', label:'Mora 0 – 15 días', cls:'m015', facturas:0, monto:0, interesMora:0, empresas:{} },
+    m1530:   { key:'m1530', label:'Mora 15 – 30 días', cls:'m1530', facturas:0, monto:0, interesMora:0, empresas:{} },
+    m2:      { key:'m2', label:'Mora 31 – 60 días', cls:'m2', facturas:0, monto:0, interesMora:0, empresas:{} },
+    m3:      { key:'m3', label:'Mora 60+ días', cls:'m3', facturas:0, monto:0, interesMora:0, empresas:{} }
   };
 
   const moraSource = masterRowsFiltered();
@@ -3815,9 +3841,11 @@ function renderMora(){
     let dias = parseInt(String(r[colDias] || '').replace(/[^\d\-]/g,''), 10);
     if(isNaN(dias)) return;
 
-    // En aging, la columna de Monto debe venir de (68) Interés Mora.
-    // Si no existe la columna, se usa 0 para evitar mezclar con otros montos.
-    const monto = masterSchema.interesMora ? toNum(r[masterSchema.interesMora]) : 0;
+    // Monto de cartera: (33) Monto a financiar.
+    const monto = masterSchema.montoAFinanciar ? toNum(r[masterSchema.montoAFinanciar]) : 0;
+
+    // Interés de mora: (68) Interes Mora.
+    const interesMora = masterSchema.interesMora ? toNum(r[masterSchema.interesMora]) : 0;
 
     let b;
     if(dias <= 0) b = buckets.vigente;
@@ -3826,56 +3854,82 @@ function renderMora(){
     else if(dias <= 60) b = buckets.m2;
     else b = buckets.m3;
 
-    b.ops += 1;
+    b.facturas += 1;
     b.monto += monto;
-    const c = (colComp ? (r[colComp] || '—') : '—').trim() || '—';
-    b.comps[c] = (b.comps[c] || 0) + 1;
+    b.interesMora += interesMora;
 
-    // Acumula el monto de mora por empresa solicitante dentro de cada tramo.
+    // Desplegable por empresa dentro del tramo.
     const empresa = masterSchema.cliente
       ? (String(r[masterSchema.cliente] || '').trim() || 'Sin empresa')
       : 'Sin empresa';
-    if(!b.empresas[empresa]) b.empresas[empresa] = { monto:0, ops:0 };
+
+    if(!b.empresas[empresa]){
+      b.empresas[empresa] = { monto:0, interesMora:0, facturas:0 };
+    }
     b.empresas[empresa].monto += monto;
-    b.empresas[empresa].ops += 1;
+    b.empresas[empresa].interesMora += interesMora;
+    b.empresas[empresa].facturas += 1;
   });
 
-  let order = ['vigente','m015','m1530','m2','m3'];
+  const orderAll = ['vigente','m015','m1530','m2','m3'];
+
+  // "Cartera completa" = suma de (33) Monto a financiar de todos los tramos.
+  const totalCartera = orderAll.reduce((s,k) => s + buckets[k].monto, 0);
+  const totalFacturas = orderAll.reduce((s,k) => s + buckets[k].facturas, 0);
+  const totalInteresMora = orderAll.reduce((s,k) => s + buckets[k].interesMora, 0);
+
+  const montoMora = buckets.m015.monto + buckets.m1530.monto + buckets.m2.monto + buckets.m3.monto;
+  const facturasMora = buckets.m015.facturas + buckets.m1530.facturas + buckets.m2.facturas + buckets.m3.facturas;
+  const interesMoraVencida = buckets.m015.interesMora + buckets.m1530.interesMora + buckets.m2.interesMora + buckets.m3.interesMora;
+  const pctMora = totalCartera > 0 ? (montoMora / totalCartera * 100) : 0;
+
+  let order = orderAll.slice();
   const tramoSel = document.getElementById('moraTramoFilter')?.value || 'ALL';
   if(tramoSel !== 'ALL') order = order.filter(k => k === tramoSel);
-  const orderAll = ['vigente','m015','m1530','m2','m3'];
-  const totalMonto = orderAll.reduce((s,k) => s + buckets[k].monto, 0);
-  const totalOps = orderAll.reduce((s,k) => s + buckets[k].ops, 0);
-  const moraMonto = buckets.m015.monto + buckets.m1530.monto + buckets.m2.monto + buckets.m3.monto;
-  const moraOps = buckets.m015.ops + buckets.m1530.ops + buckets.m2.ops + buckets.m3.ops;
-  const pctMora = totalMonto > 0 ? (moraMonto / totalMonto * 100) : 0;
 
   if(pill){
     const fl = (typeof filterLabel === 'function') ? filterLabel() : (currentExec === 'ALL' ? 'Todos' : currentExec);
-    pill.textContent = fl + ' · ' + totalOps + ' ops · ' + fmtCLP(totalMonto);
+    pill.textContent = fl + ' · ' + totalFacturas + ' facturas · Cartera ' + fmtCLP(totalCartera);
   }
 
+  // Cuadro celeste: todos los valores usan la misma base de cartera.
   if(banner){
     banner.innerHTML = `
-      <div>
-        <div class="mp-label">% mora sobre el book</div>
+      <div class="mp-main">
+        <div class="mp-label">% mora sobre la cartera</div>
         <div class="mp-value">${pctMora.toFixed(1).replace('.',',')}%</div>
       </div>
-      <div class="mp-meta">Monto en mora: <b>${fmtCLP(moraMonto)}</b> · ${moraOps} ops<br>
-      Book total considerado: <b>${fmtCLP(totalMonto)}</b></div>
+      <div class="mp-stat">
+        <div class="mp-label">Cartera total</div>
+        <div class="mp-stat-value">${fmtCLP(totalCartera)}</div>
+      </div>
+      <div class="mp-stat">
+        <div class="mp-label">Cartera en mora</div>
+        <div class="mp-stat-value">${fmtCLP(montoMora)} · ${facturasMora} facturas</div>
+      </div>
+      <div class="mp-stat">
+        <div class="mp-label">Interés mora</div>
+        <div class="mp-stat-value">${fmtCLP(interesMoraVencida)}</div>
+      </div>
     `;
   }
 
   tiles.innerHTML = order.map(k => {
     const b = buckets[k];
-    const pct = totalMonto > 0 ? (b.monto / totalMonto * 100) : 0;
+    const pct = totalCartera > 0 ? (b.monto / totalCartera * 100) : 0;
+
     const empresas = Object.entries(b.empresas || {})
-      .map(([nombre, x]) => ({ nombre, monto:x.monto || 0, ops:x.ops || 0 }))
+      .map(([nombre, x]) => ({
+        nombre,
+        monto:x.monto || 0,
+        interesMora:x.interesMora || 0,
+        facturas:x.facturas || 0
+      }))
       .sort((a,c) => c.monto - a.monto || a.nombre.localeCompare(c.nombre, 'es', {sensitivity:'base'}));
 
     const companyHtml = empresas.length
       ? `<ul class="mora-company-list">${empresas.map((e,i) => `
-          <li title="${escapeHtml(e.nombre)} · ${e.ops} operación(es)">
+          <li title="${escapeHtml(e.nombre)} · ${e.facturas} factura(s) · Interés mora ${fmtCLP(e.interesMora)}">
             <span class="mc-name">${i+1}. ${escapeHtml(e.nombre)}</span>
             <span class="mc-amount">${fmtCLP(e.monto)}</span>
           </li>`).join('')}</ul>`
@@ -3884,8 +3938,8 @@ function renderMora(){
     return `<div class="mora-tile ${b.cls}">
       <div class="mt-label">${b.label}</div>
       <div class="mt-monto">${fmtCLP(b.monto)}</div>
-      <div class="mt-meta">${b.ops} ops · ${pct.toFixed(1).replace('.',',')}%</div>
-      <div class="mora-bar-wrap"><div class="mora-track"><div class="mora-fill ${b.cls}" style="width:${Math.min(pct,100)}%"></div></div></div>
+      <div class="mt-meta">${b.facturas} facturas · ${pct.toFixed(1).replace('.',',')}% de la cartera</div>
+      <div class="mora-bar-wrap"><div class="mora-track"><div class="mora-fill ${b.cls}" style="width:${Math.min(Math.max(pct,0),100)}%"></div></div></div>
       <details class="mora-drop">
         <summary>Ver empresas (${empresas.length})</summary>
         ${companyHtml}
@@ -3894,36 +3948,53 @@ function renderMora(){
   }).join('');
 
   const exportRows = [
-    ['Tramo', 'Operaciones', 'Monto (CLP)', '% del book', 'Comportamiento']
+    ['Tramo', 'Facturas', 'Monto (CLP)', '% de la cartera', 'Interés mora']
   ];
 
   tbody.innerHTML = order.map(k => {
     const b = buckets[k];
-    const pct = totalMonto > 0 ? (b.monto / totalMonto * 100) : 0;
-    const compStr = Object.keys(b.comps).length
-      ? Object.entries(b.comps).sort((a,c)=>c[1]-a[1]).map(([n,c]) => n + ' (' + c + ')').join(', ')
-      : '—';
-    exportRows.push([b.label, b.ops, Math.round(b.monto), pct.toFixed(1).replace('.',',') + '%', compStr]);
+    const pct = totalCartera > 0 ? (b.monto / totalCartera * 100) : 0;
+
+    exportRows.push([
+      b.label,
+      b.facturas,
+      Math.round(b.monto),
+      pct.toFixed(1).replace('.',',') + '%',
+      Math.round(b.interesMora)
+    ]);
+
     return `<tr>
       <td class="left">${b.label}</td>
-      <td>${fmtInt(b.ops)}</td>
+      <td>${fmtInt(b.facturas)}</td>
       <td>${fmtCLP(b.monto)}</td>
       <td>${pct.toFixed(1).replace('.',',')}%</td>
-      <td class="left" style="font-weight:400;color:var(--ink-soft)">${escapeHtml(compStr)}</td>
+      <td>${fmtCLP(b.interesMora)}</td>
     </tr>`;
   }).join('') + `<tr class="total-row">
       <td class="left">Total</td>
-      <td>${fmtInt(totalOps)}</td>
-      <td>${fmtCLP(totalMonto)}</td>
+      <td>${fmtInt(totalFacturas)}</td>
+      <td>${fmtCLP(totalCartera)}</td>
       <td>100%</td>
-      <td class="left" style="font-weight:400">Mora ${pctMora.toFixed(1).replace('.',',')}% del book</td>
+      <td>${fmtCLP(totalInteresMora)}</td>
     </tr>`;
 
-  exportRows.push(['Total', totalOps, Math.round(totalMonto), '100%', 'Mora ' + pctMora.toFixed(1).replace('.',',') + '% del book']);
-  exportRows.push(['Monto en mora', moraOps, Math.round(moraMonto), pctMora.toFixed(1).replace('.',',') + '%', '']);
+  exportRows.push([
+    'Total',
+    totalFacturas,
+    Math.round(totalCartera),
+    '100%',
+    Math.round(totalInteresMora)
+  ]);
+
   window._moraExportRows = exportRows;
 
-  return { totalMonto, moraMonto, pctMora, buckets };
+  return {
+    totalMonto: totalCartera,
+    moraMonto: montoMora,
+    pctMora,
+    totalInteresMora,
+    buckets
+  };
 }
 
 function downloadMoraCSV(){
