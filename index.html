@@ -1845,6 +1845,7 @@ function emptyMetrics(){
 /*
  * Adaptador del maestro de factoring.
  * La versión nueva trae explícitamente:
+ *   (10) Abono pyme         -> cliente activo cuando el valor es exactamente 0
  *   (23) Colocado mes       -> YYYY-MM del período de la operación
  *   (24) Cliente nuevo      -> YYYY-MM del alta del cliente
  *   (60) Gasto legal ...    -> gasto legal sin IVA
@@ -1868,6 +1869,7 @@ function resolveMasterSchema(rows){
     exec: findMasterHeader(keys, [/^\(29\)\s*Ejecutivo/i, /\(\d+\)\s*Ejecutivo/i, /^Ejecutivo$/i, /Ejecutivo/i], 'Ejecutivo'),
     cliente: findMasterHeader(keys, [/^\(26\).*Empresa\s*solicitante/i, /Empresa\s*solicitante/i], '(26)Empresa solicitante'),
     deudor: findMasterHeader(keys, [/^\(28\).*Empresa\s*deudora/i, /Empresa\s*deudora/i], '(28)Empresa deudora'),
+    abonoPyme: findMasterHeader(keys, [/^\(10\)\s*Abono\s*pyme/i, /^Abono\s*pyme$/i, /Abono\s*pyme/i], null),
     colocadoMes: findMasterHeader(keys, [/^\(23\).*Colocado\s*mes/i, /Colocado\s*mes/i], null),
     clienteNuevoMes: findMasterHeader(keys, [/^\(24\).*Cliente\s*nuevo/i, /Cliente\s*nuevo/i], null),
     fechaCreacion: findMasterHeader(keys, [/^\(47\).*Fecha\s*creaci[oó]n/i, /Fecha\s*creaci[oó]n/i], '(47)Fecha creacion'),
@@ -1895,6 +1897,29 @@ function masterPeriodYM(row, schema){
 function masterDeclaredNewYM(row, schema){
   if(!row || !schema || !schema.clienteNuevoMes) return null;
   return parseYM(row[schema.clienteNuevoMes]);
+}
+
+/**
+ * Período de CLIENTES ACTIVOS.
+ * Para este indicador la fecha válida es exclusivamente (47) Fecha creación,
+ * que corresponde a la fecha de la transacción. No se usa (23) Colocado mes.
+ */
+function masterActiveClientYM(row, schema){
+  if(!row || !schema || !schema.fechaCreacion) return null;
+  return parseYM(row[schema.fechaCreacion]);
+}
+
+/**
+ * Una fila califica como cliente activo solo cuando (10) Abono pyme = 0.
+ * Vacíos, "-" y textos no numéricos no se interpretan como cero.
+ */
+function masterIsActiveClientRow(row, schema){
+  if(!row || !schema || !schema.abonoPyme) return false;
+  const raw = row[schema.abonoPyme];
+  if(raw === null || raw === undefined) return false;
+  const s = String(raw).trim();
+  if(!s || s === '-' || !/\d/.test(s)) return false;
+  return toNum(raw) === 0;
 }
 
 function masterMontoAnticipo(row, schema){
@@ -2047,21 +2072,6 @@ function buildData(masterRows, facturaRows, selectedYear){
         summary.total.accum.clientes_nuevos += 1;
       }
     }
-    // Clientes activos = empresas distintas que operaron en el periodo
-    if(cliName){
-      const kE = e + '|' + ym + '|' + cliName;
-      const kT = 'tot|' + ym + '|' + cliName;
-      if(!seenActiveMonth[kE]){
-        seenActiveMonth[kE] = true;
-        cell.clientes_activos += 1;
-        summary.ejecutivos[e].accum.clientes_activos += 1;
-      }
-      if(!seenActiveMonth[kT]){
-        seenActiveMonth[kT] = true;
-        summary.total.months[ym].clientes_activos += 1;
-        summary.total.accum.clientes_activos += 1;
-      }
-    }
     let comis = 0;
     comis += masterGastoLegalSinIva(r, schema);
     if(colGastoOp) comis += toNum(r[colGastoOp]);
@@ -2089,6 +2099,33 @@ function buildData(masterRows, facturaRows, selectedYear){
     summary.total.accum.comisiones += comis;
   });
 
+  // CLIENTES ACTIVOS: cálculo independiente del período operativo del resto de KPIs.
+  // Regla de negocio: (10) Abono pyme = 0 y período según (47) Fecha creación.
+  // Se cuenta cada Empresa solicitante una sola vez por mes; si se visualiza el total,
+  // un mismo cliente no se duplica aunque aparezca asociado a más de un ejecutivo.
+  masterRows.forEach(r => {
+    const e = String(r[colExec] || '').trim();
+    const cliName = String(r[colCli] || '').trim();
+    if(!e || !cliName || !summary.ejecutivos[e]) return;
+    if(!masterIsActiveClientRow(r, schema)) return;
+
+    const activeYm = masterActiveClientYM(r, schema);
+    if(!activeYm || !summary.ejecutivos[e].months[activeYm]) return;
+
+    const kE = e + '|' + activeYm + '|' + cliName;
+    const kT = 'tot|' + activeYm + '|' + cliName;
+    if(!seenActiveMonth[kE]){
+      seenActiveMonth[kE] = true;
+      summary.ejecutivos[e].months[activeYm].clientes_activos += 1;
+      summary.ejecutivos[e].accum.clientes_activos += 1;
+    }
+    if(!seenActiveMonth[kT]){
+      seenActiveMonth[kT] = true;
+      summary.total.months[activeYm].clientes_activos += 1;
+      summary.total.accum.clientes_activos += 1;
+    }
+  });
+
   const missing = months.filter(m => !masterRows.some(r => masterPeriodYM(r, schema) === m));
   if(missing.length && missing.length < 12){
     notes.push('Sin registros en: ' + missing.map(m => labelMonthShort(m)).join(', ') + '. Se muestran como 0.');
@@ -2100,6 +2137,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('Período mensual: se usa (23) Colocado mes; si falta, se usa (47) Fecha creación.');
     notes.push('Monto anticipo: se usa (45); si viene 0, se toma (43) Monto final adelantado o (46) Monto a giro real.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
+    notes.push('Clientes activos: Empresa solicitante distinta con (10) Abono pyme = 0; el período se determina exclusivamente con (47) Fecha creación (fecha de la transacción).');
     if(colLegalSinIva) notes.push('Gasto legal: se prioriza (60) Gasto legal Comisión RC (sin IVA); si falta, se usa (34).');
   } else {
     notes.push('No se encontró columna de interés en el maestro; Diferencia de precio = 0.');
@@ -2283,7 +2321,7 @@ function renderResumen(){
 function renderMesCurso(){
   const m = DATA.generated_current_month;
   document.getElementById('mesCursoDesc').innerHTML =
-    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo: clientes activos (empresas distintas que operaron), clientes nuevos, operaciones, monto anticipado y diferencia de precio, contra la meta del mes de cada ejecutivo.';
+    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo: clientes activos (empresas distintas con (10) Abono pyme = 0, fechadas por (47) Fecha creación), clientes nuevos, operaciones, monto anticipado y diferencia de precio, contra la meta del mes de cada ejecutivo.';
 
   const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
   const rows = execs.map(e => {
@@ -2299,6 +2337,9 @@ function renderMesCurso(){
     totals.monto_fin += r.monto_fin || 0;
     totals.dif_precio += r.dif_precio || 0;
   });
+  if(currentExec === 'ALL' && DATA.summary.total && DATA.summary.total.months[m]){
+    totals.clientes_activos = DATA.summary.total.months[m].clientes_activos || 0;
+  }
 
   const metasMes = METAS_BY_MONTH[m] || null;
   const hayMetasMes = !!metasMes;
@@ -2685,7 +2726,13 @@ function metricsForMonth(ym){
     if(ed && ed.months[ym]) return ed.months[ym];
     return emptyMetrics();
   });
-  return sumMetrics(cells);
+  const result = sumMetrics(cells);
+  // Para "Todos", clientes activos debe ser el número de clientes únicos del mes,
+  // no la suma de ejecutivos (un cliente podría aparecer con más de uno).
+  if(currentExec === 'ALL' && DATA.summary.total && DATA.summary.total.months[ym]){
+    result.clientes_activos = DATA.summary.total.months[ym].clientes_activos || 0;
+  }
+  return result;
 }
 
 /** Métricas de un mes aunque no esté en DATA.months (otros años). Usa cache CSV. */
@@ -2705,18 +2752,23 @@ function metricsForMonthRaw(ym){
   masterRowsCache.forEach(r => {
     const e = r[schema.exec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
-    if(masterPeriodYM(r, schema) !== ym) return;
 
     const cli = String(r[schema.cliente] || '').trim();
+
+    // Clientes activos usa SU PROPIO período: (47) Fecha creación.
+    // Se evalúa antes del filtro de (23) Colocado mes usado por otros indicadores.
+    if(cli && masterActiveClientYM(r, schema) === ym && masterIsActiveClientRow(r, schema) && !seenActive[cli]){
+      seenActive[cli] = true;
+      t.clientes_activos += 1;
+    }
+
+    if(masterPeriodYM(r, schema) !== ym) return;
+
     const declaredNewYm = masterDeclaredNewYM(r, schema);
     const isNew = declaredNewYm ? (declaredNewYm === ym) : isFirstOpOfClient(r, schema.cliente, schema.fechaCreacion, firstMap);
     if(cli && isNew && !seen[cli]){
       seen[cli] = true;
       t.clientes_nuevos += 1;
-    }
-    if(cli && !seenActive[cli]){
-      seenActive[cli] = true;
-      t.clientes_activos += 1;
     }
 
     t.operaciones += 1;
@@ -2756,7 +2808,9 @@ function metricsForDateRange(fromStr, toStr){
       seen[cli] = true;
       t.clientes_nuevos += 1;
     }
-    if(cli && !seenActive[cli]){
+    // El rango ya está filtrado por (47) Fecha creación; para cliente activo
+    // además se exige estrictamente (10) Abono pyme = 0.
+    if(cli && masterIsActiveClientRow(r, schema) && !seenActive[cli]){
       seenActive[cli] = true;
       t.clientes_activos += 1;
     }
