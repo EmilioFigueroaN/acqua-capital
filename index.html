@@ -3490,7 +3490,7 @@ function renderKpis(){
       sub: '(40) Tasa interés mensual · ponderada por (33) Monto a financiar · ' + baseLabel
     },
     {
-      tone: '', label: 'Ticket promedio',
+      tone: '', label: 'Facturas promedio',
       value: fmtCLP(ticketCur),
       delta: pctDelta(ticketCur, ticketPrev),
       sub: 'monto ÷ operaciones'
@@ -3721,7 +3721,7 @@ function renderInsights(conc){
       if(Math.abs(tPct) >= 8){
         insights.push({
           type: tPct > 0 ? 'ok' : 'warn',
-          html: `<b>Ticket promedio</b> (${labelMonthShort(curYm)}): <b>${fmtCLP(ticket)}</b> · variación de ${tPct>0?'+':''}${tPct.toFixed(1).replace('.',',')}% respecto de ${labelMonthShort(prevYm)}.`
+          html: `<b>Facturas promedio</b> (${labelMonthShort(curYm)}): <b>${fmtCLP(ticket)}</b> · variación de ${tPct>0?'+':''}${tPct.toFixed(1).replace('.',',')}% respecto de ${labelMonthShort(prevYm)}.`
         });
       }
     }
