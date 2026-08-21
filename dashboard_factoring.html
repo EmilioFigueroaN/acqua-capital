@@ -1982,7 +1982,7 @@ function labelMonthShort(ym){
 }
 
 function emptyMetrics(){
-  return {clientes_nuevos:0, clientes_activos:0, operaciones:0, monto_fin:0, cartera_vigente:0, dif_precio:0, comisiones:0};
+  return {clientes_nuevos:0, clientes_activos:0, operaciones:0, monto_fin:0, cartera_vigente:0, dif_precio:0, comisiones:0, tasa_pond_num:0, tasa_pond_den:0};
 }
 
 /*
@@ -2019,6 +2019,7 @@ function resolveMasterSchema(rows){
     clienteNuevoMes: findMasterHeader(keys, [/^\(24\).*Cliente\s*nuevo/i, /Cliente\s*nuevo/i], null),
     fechaCreacion: findMasterHeader(keys, [/^\(47\).*Fecha\s*creaci[oó]n/i, /Fecha\s*creaci[oó]n/i], '(47)Fecha creacion'),
     interes: findMasterHeader(keys, [/^\(41\).*Inter[eé]s/i, /^Inter[eé]s$/i, /Inter[eé]s/i], null),
+    tasaInteresMensual: findMasterHeader(keys, [/^\(40\).*Tasa\s*inter[eé]s\s*mensual/i, /Tasa\s*inter[eé]s\s*mensual/i], null),
     montoAFinanciar: findMasterHeader(keys, [/^\(33\).*Monto\s*a\s*financiar/i, /^Monto\s*a\s*financiar$/i, /Monto\s*a\s*financiar/i], null),
     montoAnticipo: findMasterHeader(keys, [/^\(45\).*Monto\s*anticipo/i, /^Monto\s*anticipo$/i, /Monto\s*anticipo/i], 'Monto anticipo'),
     montoFinalAdelantado: findMasterHeader(keys, [/^\(43\).*Monto\s*final\s*adelantado/i, /Monto\s*final\s*adelantado/i], null),
@@ -2104,6 +2105,7 @@ function buildData(masterRows, facturaRows, selectedYear){
   const colCli = schema.cliente;
   const colFecha = schema.fechaCreacion;
   const colInteres = schema.interes;
+  const colTasaInteresMensual = schema.tasaInteresMensual;
   const colColocado = schema.colocadoMes;
   const colLegal = schema.gastoLegal;
   const colLegalSinIva = schema.gastoLegalSinIva;
@@ -2199,6 +2201,9 @@ function buildData(masterRows, facturaRows, selectedYear){
 
     const monto = masterMontoAnticipo(r, schema);
     const dif = colInteres ? toNum(r[colInteres]) : 0;
+    const tasaMensual = colTasaInteresMensual ? toNum(r[colTasaInteresMensual]) : 0;
+    const montoBaseTasa = schema.montoAFinanciar ? toNum(r[schema.montoAFinanciar]) : 0;
+    const tasaPondNum = tasaMensual * montoBaseTasa;
 
     const cell = summary.ejecutivos[e].months[ym];
     if(esPrimera && cliName){
@@ -2229,6 +2234,8 @@ function buildData(masterRows, facturaRows, selectedYear){
     cell.cartera_vigente += carteraVigente;
     cell.dif_precio += dif;
     cell.comisiones += comis;
+    cell.tasa_pond_num += tasaPondNum;
+    cell.tasa_pond_den += montoBaseTasa;
 
     const acc = summary.ejecutivos[e].accum;
     acc.operaciones += 1;
@@ -2236,18 +2243,24 @@ function buildData(masterRows, facturaRows, selectedYear){
     acc.cartera_vigente += carteraVigente;
     acc.dif_precio += dif;
     acc.comisiones += comis;
+    acc.tasa_pond_num += tasaPondNum;
+    acc.tasa_pond_den += montoBaseTasa;
 
     summary.total.months[ym].operaciones += 1;
     summary.total.months[ym].monto_fin += monto;
     summary.total.months[ym].cartera_vigente += carteraVigente;
     summary.total.months[ym].dif_precio += dif;
     summary.total.months[ym].comisiones += comis;
+    summary.total.months[ym].tasa_pond_num += tasaPondNum;
+    summary.total.months[ym].tasa_pond_den += montoBaseTasa;
 
     summary.total.accum.operaciones += 1;
     summary.total.accum.monto_fin += monto;
     summary.total.accum.cartera_vigente += carteraVigente;
     summary.total.accum.dif_precio += dif;
     summary.total.accum.comisiones += comis;
+    summary.total.accum.tasa_pond_num += tasaPondNum;
+    summary.total.accum.tasa_pond_den += montoBaseTasa;
   });
 
   // CLIENTES ACTIVOS: cálculo independiente del período operativo del resto de KPIs.
@@ -2291,6 +2304,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
     notes.push('Clientes activos: Empresa solicitante distinta con (10) Abono pyme = 0; el período se determina exclusivamente con (47) Fecha creación (fecha de la transacción).');
     if(colGastoOp) notes.push('Comisión: se usa (36) Gasto operación (sin IVA) por operación.');
+    if(colTasaInteresMensual && schema.montoAFinanciar) notes.push('Tasa promedio ponderada: Σ[(40) Tasa interés mensual × (33) Monto a financiar] ÷ Σ[(33) Monto a financiar].');
   } else {
     notes.push('No se encontró columna de interés en el maestro; Diferencia de precio = 0.');
   }
@@ -2744,10 +2758,10 @@ function renderFacturas(){
   rows.sort((a,b) => {
     const aN = a.promedio_warren === null || a.promedio_warren === undefined;
     const bN = b.promedio_warren === null || b.promedio_warren === undefined;
-    // Los registros sin Warren se mantienen al final en ambos sentidos.
+    // Los registros sin Warren se muestran al principio en ambos sentidos.
     if(aN && bN) return String(a.razon_social || '').localeCompare(String(b.razon_social || ''), 'es', { sensitivity:'base' });
-    if(aN) return 1;
-    if(bN) return -1;
+    if(aN) return -1;
+    if(bN) return 1;
     const diff = Number(a.promedio_warren) - Number(b.promedio_warren);
     if(diff === 0) return String(a.razon_social || '').localeCompare(String(b.razon_social || ''), 'es', { sensitivity:'base' });
     return warrenSortDir === 'asc' ? diff : -diff;
@@ -2829,6 +2843,8 @@ function sumMetrics(list){
     t.cartera_vigente += c.cartera_vigente || 0;
     t.dif_precio += c.dif_precio || 0;
     t.comisiones += c.comisiones || 0;
+    t.tasa_pond_num += c.tasa_pond_num || 0;
+    t.tasa_pond_den += c.tasa_pond_den || 0;
   });
   return t;
 }
@@ -2933,6 +2949,12 @@ function metricsForMonthRaw(ym){
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
+    {
+      const baseTasa = schema.montoAFinanciar ? toNum(r[schema.montoAFinanciar]) : 0;
+      const tasa = schema.tasaInteresMensual ? toNum(r[schema.tasaInteresMensual]) : 0;
+      t.tasa_pond_num += tasa * baseTasa;
+      t.tasa_pond_den += baseTasa;
+    }
   });
   return t;
 }
@@ -2988,6 +3010,12 @@ function metricsForYear(year){
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
+    {
+      const baseTasa = schema.montoAFinanciar ? toNum(r[schema.montoAFinanciar]) : 0;
+      const tasa = schema.tasaInteresMensual ? toNum(r[schema.tasaInteresMensual]) : 0;
+      t.tasa_pond_num += tasa * baseTasa;
+      t.tasa_pond_den += baseTasa;
+    }
   });
 
   return t;
@@ -3055,6 +3083,12 @@ function metricsForDateRange(fromStr, toStr){
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
+    {
+      const baseTasa = schema.montoAFinanciar ? toNum(r[schema.montoAFinanciar]) : 0;
+      const tasa = schema.tasaInteresMensual ? toNum(r[schema.tasaInteresMensual]) : 0;
+      t.tasa_pond_num += tasa * baseTasa;
+      t.tasa_pond_den += baseTasa;
+    }
   });
   return t;
 }
@@ -3098,6 +3132,8 @@ function yearAverageMetrics(year){
       sums.cartera_vigente += m.cartera_vigente;
       sums.dif_precio += m.dif_precio;
       sums.comisiones += m.comisiones;
+      sums.tasa_pond_num += m.tasa_pond_num || 0;
+      sums.tasa_pond_den += m.tasa_pond_den || 0;
       n++;
     }
   });
@@ -3109,7 +3145,9 @@ function yearAverageMetrics(year){
     monto_fin: sums.monto_fin / n,
     cartera_vigente: sums.cartera_vigente / n,
     dif_precio: sums.dif_precio / n,
-    comisiones: sums.comisiones / n
+    comisiones: sums.comisiones / n,
+    tasa_pond_num: sums.tasa_pond_num / n,
+    tasa_pond_den: sums.tasa_pond_den / n
   };
 }
 
@@ -3323,6 +3361,9 @@ function renderKpis(){
 
   const ticketCur = cur.operaciones ? cur.monto_fin / cur.operaciones : 0;
   const ticketPrev = prev.operaciones ? prev.monto_fin / prev.operaciones : 0;
+  const tasaPondCur = cur.tasa_pond_den ? cur.tasa_pond_num / cur.tasa_pond_den : 0;
+  const tasaPondPrev = prev.tasa_pond_den ? prev.tasa_pond_num / prev.tasa_pond_den : 0;
+  const fmtPct2 = n => (Number(n)||0).toFixed(2).replace('.', ',') + '%';
 
   const tag = document.getElementById('kpiPeriodTag');
   if(tag) tag.textContent = tagText;
@@ -3363,6 +3404,12 @@ function renderKpis(){
       value: fmtCLP(cur.comisiones || 0),
       delta: pctDelta(cur.comisiones || 0, prev.comisiones || 0),
       sub: baseLabel
+    },
+    {
+      tone: 'gold', label: 'Tasa promedio ponderada',
+      value: fmtPct2(tasaPondCur),
+      delta: pctDelta(tasaPondCur, tasaPondPrev),
+      sub: '(40) Tasa interés mensual · ponderada por (33) Monto a financiar · ' + baseLabel
     },
     {
       tone: '', label: 'Ticket promedio',
