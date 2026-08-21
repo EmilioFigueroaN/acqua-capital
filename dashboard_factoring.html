@@ -799,6 +799,48 @@ select#execFilter:focus-visible{
   .mora-table-wrap{ margin-top:8px; overflow:auto; max-height:280px; }
   .mora-table-wrap table{ min-width:520px; font-size:12.5px; }
 
+  /* Desplegable de empresas por tramo de mora */
+  .mora-tile details.mora-drop{
+    margin-top:10px;
+    border:1px solid var(--line);
+    border-radius:9px;
+    background:var(--white);
+    overflow:hidden;
+  }
+  .mora-tile details.mora-drop > summary{
+    cursor:pointer; list-style:none; user-select:none;
+    display:flex; align-items:center; gap:7px;
+    padding:7px 9px;
+    font-size:11.5px; font-weight:600; color:var(--teal-deep);
+  }
+  .mora-tile details.mora-drop > summary::-webkit-details-marker{ display:none; }
+  .mora-tile details.mora-drop > summary::before{
+    content:'▸'; font-size:10px; transition:transform .15s ease;
+  }
+  .mora-tile details.mora-drop[open] > summary::before{ content:'▾'; }
+  .mora-company-list{
+    list-style:none; margin:0; padding:0 9px 8px;
+    display:flex; flex-direction:column; gap:0;
+    max-height:180px; overflow:auto;
+  }
+  .mora-company-list li{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+    padding:6px 0; border-top:1px solid var(--cloud);
+    font-size:11.5px;
+  }
+  .mora-company-list .mc-name{
+    font-weight:600; color:var(--ink);
+    min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .mora-company-list .mc-amount{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600;
+    color:var(--ink-soft); white-space:nowrap;
+  }
+  .mora-company-empty{
+    padding:7px 9px 9px; font-size:11.5px; color:#6b7a8c;
+    border-top:1px solid var(--cloud);
+  }
+
 
   /* ---------- CESIÓN / FINANCIERAS ---------- */
   .funnel-row{
@@ -3761,11 +3803,11 @@ function renderMora(){
   }
 
   const buckets = {
-    vigente: { key:'vigente', label:'Vigente / por vencer', cls:'vigente', ops:0, monto:0, comps:{} },
-    m015:    { key:'m015', label:'Mora 0 – 15 días', cls:'m015', ops:0, monto:0, comps:{} },
-    m1530:   { key:'m1530', label:'Mora 15 – 30 días', cls:'m1530', ops:0, monto:0, comps:{} },
-    m2:      { key:'m2', label:'Mora 31 – 60 días', cls:'m2', ops:0, monto:0, comps:{} },
-    m3:      { key:'m3', label:'Mora 60+ días', cls:'m3', ops:0, monto:0, comps:{} }
+    vigente: { key:'vigente', label:'Vigente / por vencer', cls:'vigente', ops:0, monto:0, comps:{}, empresas:{} },
+    m015:    { key:'m015', label:'Mora 0 – 15 días', cls:'m015', ops:0, monto:0, comps:{}, empresas:{} },
+    m1530:   { key:'m1530', label:'Mora 15 – 30 días', cls:'m1530', ops:0, monto:0, comps:{}, empresas:{} },
+    m2:      { key:'m2', label:'Mora 31 – 60 días', cls:'m2', ops:0, monto:0, comps:{}, empresas:{} },
+    m3:      { key:'m3', label:'Mora 60+ días', cls:'m3', ops:0, monto:0, comps:{}, empresas:{} }
   };
 
   const moraSource = masterRowsFiltered();
@@ -3788,6 +3830,14 @@ function renderMora(){
     b.monto += monto;
     const c = (colComp ? (r[colComp] || '—') : '—').trim() || '—';
     b.comps[c] = (b.comps[c] || 0) + 1;
+
+    // Acumula el monto de mora por empresa solicitante dentro de cada tramo.
+    const empresa = masterSchema.cliente
+      ? (String(r[masterSchema.cliente] || '').trim() || 'Sin empresa')
+      : 'Sin empresa';
+    if(!b.empresas[empresa]) b.empresas[empresa] = { monto:0, ops:0 };
+    b.empresas[empresa].monto += monto;
+    b.empresas[empresa].ops += 1;
   });
 
   let order = ['vigente','m015','m1530','m2','m3'];
@@ -3819,11 +3869,27 @@ function renderMora(){
   tiles.innerHTML = order.map(k => {
     const b = buckets[k];
     const pct = totalMonto > 0 ? (b.monto / totalMonto * 100) : 0;
+    const empresas = Object.entries(b.empresas || {})
+      .map(([nombre, x]) => ({ nombre, monto:x.monto || 0, ops:x.ops || 0 }))
+      .sort((a,c) => c.monto - a.monto || a.nombre.localeCompare(c.nombre, 'es', {sensitivity:'base'}));
+
+    const companyHtml = empresas.length
+      ? `<ul class="mora-company-list">${empresas.map((e,i) => `
+          <li title="${escapeHtml(e.nombre)} · ${e.ops} operación(es)">
+            <span class="mc-name">${i+1}. ${escapeHtml(e.nombre)}</span>
+            <span class="mc-amount">${fmtCLP(e.monto)}</span>
+          </li>`).join('')}</ul>`
+      : '<div class="mora-company-empty">Sin empresas en este tramo.</div>';
+
     return `<div class="mora-tile ${b.cls}">
       <div class="mt-label">${b.label}</div>
       <div class="mt-monto">${fmtCLP(b.monto)}</div>
       <div class="mt-meta">${b.ops} ops · ${pct.toFixed(1).replace('.',',')}%</div>
       <div class="mora-bar-wrap"><div class="mora-track"><div class="mora-fill ${b.cls}" style="width:${Math.min(pct,100)}%"></div></div></div>
+      <details class="mora-drop">
+        <summary>Ver empresas (${empresas.length})</summary>
+        ${companyHtml}
+      </details>
     </div>`;
   }).join('');
 
