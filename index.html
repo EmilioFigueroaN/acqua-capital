@@ -2076,10 +2076,7 @@ function buildData(masterRows, facturaRows, selectedYear){
         summary.total.accum.clientes_nuevos += 1;
       }
     }
-    let comis = 0;
-    comis += masterGastoLegalSinIva(r, schema);
-    if(colGastoOp) comis += toNum(r[colGastoOp]);
-    if(colDealer) comis += toNum(r[colDealer]);
+    const comis = colGastoOp ? toNum(r[colGastoOp]) : 0;
 
     cell.operaciones += 1;
     cell.monto_fin += monto;
@@ -2142,7 +2139,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('Monto anticipo: se calcula por operación como (33) Monto a financiar − (10) Abono pyme.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
     notes.push('Clientes activos: Empresa solicitante distinta con (10) Abono pyme = 0; el período se determina exclusivamente con (47) Fecha creación (fecha de la transacción).');
-    if(colLegalSinIva) notes.push('Gasto legal: se prioriza (60) Gasto legal Comisión RC (sin IVA); si falta, se usa (34).');
+    if(colGastoOp) notes.push('Comisión: se usa (36) Gasto operación (sin IVA) por operación.');
   } else {
     notes.push('No se encontró columna de interés en el maestro; Diferencia de precio = 0.');
   }
@@ -2778,9 +2775,7 @@ function metricsForMonthRaw(ym){
     t.operaciones += 1;
     t.monto_fin += masterMontoAnticipo(r, schema);
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
-    t.comisiones += masterGastoLegalSinIva(r, schema);
-    if(schema.gastoOperacion) t.comisiones += toNum(r[schema.gastoOperacion]);
-    if(schema.gastoDealer) t.comisiones += toNum(r[schema.gastoDealer]);
+    t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
   });
   return t;
 }
@@ -2822,9 +2817,7 @@ function metricsForDateRange(fromStr, toStr){
     t.operaciones += 1;
     t.monto_fin += masterMontoAnticipo(r, schema);
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
-    t.comisiones += masterGastoLegalSinIva(r, schema);
-    if(schema.gastoOperacion) t.comisiones += toNum(r[schema.gastoOperacion]);
-    if(schema.gastoDealer) t.comisiones += toNum(r[schema.gastoDealer]);
+    t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
   });
   return t;
 }
