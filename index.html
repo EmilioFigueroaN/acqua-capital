@@ -1791,7 +1791,7 @@ function toNum(v){
 }
 
 function parseYM(d){
-  d = (d||'').trim();
+  d = String(d ?? '').trim();
   if(!d) return null;
   let m;
   // YYYY-MM-DD
@@ -1842,32 +1842,105 @@ function emptyMetrics(){
   return {clientes_nuevos:0, clientes_activos:0, operaciones:0, monto_fin:0, dif_precio:0, comisiones:0};
 }
 
+/*
+ * Adaptador del maestro de factoring.
+ * La versión nueva trae explícitamente:
+ *   (23) Colocado mes       -> YYYY-MM del período de la operación
+ *   (24) Cliente nuevo      -> YYYY-MM del alta del cliente
+ *   (60) Gasto legal ...    -> gasto legal sin IVA
+ *
+ * Se mantienen fallbacks por nombre y por las columnas anteriores para que
+ * el dashboard siga siendo compatible con exports históricos.
+ */
+function findMasterHeader(keys, patterns, fallback=null){
+  for(const re of patterns){
+    const hit = keys.find(k => re.test(String(k || '').trim()));
+    if(hit) return hit;
+  }
+  return fallback;
+}
+
+function resolveMasterSchema(rows){
+  const sample = (rows && rows[0]) || {};
+  const keys = Object.keys(sample);
+  return {
+    keys,
+    exec: findMasterHeader(keys, [/^\(29\)\s*Ejecutivo/i, /\(\d+\)\s*Ejecutivo/i, /^Ejecutivo$/i, /Ejecutivo/i], 'Ejecutivo'),
+    cliente: findMasterHeader(keys, [/^\(26\).*Empresa\s*solicitante/i, /Empresa\s*solicitante/i], '(26)Empresa solicitante'),
+    deudor: findMasterHeader(keys, [/^\(28\).*Empresa\s*deudora/i, /Empresa\s*deudora/i], '(28)Empresa deudora'),
+    colocadoMes: findMasterHeader(keys, [/^\(23\).*Colocado\s*mes/i, /Colocado\s*mes/i], null),
+    clienteNuevoMes: findMasterHeader(keys, [/^\(24\).*Cliente\s*nuevo/i, /Cliente\s*nuevo/i], null),
+    fechaCreacion: findMasterHeader(keys, [/^\(47\).*Fecha\s*creaci[oó]n/i, /Fecha\s*creaci[oó]n/i], '(47)Fecha creacion'),
+    interes: findMasterHeader(keys, [/^\(41\).*Inter[eé]s/i, /^Inter[eé]s$/i, /Inter[eé]s/i], null),
+    montoAnticipo: findMasterHeader(keys, [/^\(45\).*Monto\s*anticipo/i, /^Monto\s*anticipo$/i, /Monto\s*anticipo/i], 'Monto anticipo'),
+    montoFinalAdelantado: findMasterHeader(keys, [/^\(43\).*Monto\s*final\s*adelantado/i, /Monto\s*final\s*adelantado/i], null),
+    montoGiro: findMasterHeader(keys, [/^\(46\).*Monto\s*a\s*giro/i, /Monto\s*a\s*giro/i], null),
+    montoBruto: findMasterHeader(keys, [/^\(12\).*Monto\s*facturas/i, /Monto\s*facturas/i], null),
+    montoVigente: findMasterHeader(keys, [/^\(55\).*Monto\s*vigente/i, /Monto\s*vigente/i], null),
+    gastoLegalSinIva: findMasterHeader(keys, [/^\(60\).*Gasto\s*legal.*sin\s*iva/i, /Gasto\s*legal.*sin\s*iva/i], null),
+    gastoLegal: findMasterHeader(keys, [/^\(34\).*Gasto\s*legal/i, /Gasto\s*legal.*Comisi/i], null),
+    gastoOperacion: findMasterHeader(keys, [/^\(36\).*Gasto\s*operaci[oó]n/i, /Gasto\s*operaci[oó]n\s*\(sin/i], null),
+    gastoDealer: findMasterHeader(keys, [/^\(37\).*Gasto\s*operacion\s*dealer/i, /Gasto\s*operacion\s*dealer/i], null),
+    diasMora: findMasterHeader(keys, [/^\(19\).*D[ií]as\s*de\s*mora/i, /D[ií]as\s*de\s*mora/i], null),
+    comportamiento: findMasterHeader(keys, [/^\(18\).*Comportamiento/i, /Comportamiento/i], null)
+  };
+}
+
+function masterPeriodYM(row, schema){
+  if(!row || !schema) return null;
+  return (schema.colocadoMes ? parseYM(row[schema.colocadoMes]) : null)
+    || (schema.fechaCreacion ? parseYM(row[schema.fechaCreacion]) : null);
+}
+
+function masterDeclaredNewYM(row, schema){
+  if(!row || !schema || !schema.clienteNuevoMes) return null;
+  return parseYM(row[schema.clienteNuevoMes]);
+}
+
+function masterMontoAnticipo(row, schema){
+  if(!row || !schema) return 0;
+  let monto = schema.montoAnticipo ? toNum(row[schema.montoAnticipo]) : 0;
+  if(monto === 0 && schema.montoFinalAdelantado) monto = toNum(row[schema.montoFinalAdelantado]);
+  if(monto === 0 && schema.montoGiro) monto = toNum(row[schema.montoGiro]);
+  return monto;
+}
+
+function masterGastoLegalSinIva(row, schema){
+  if(!row || !schema) return 0;
+  if(schema.gastoLegalSinIva){
+    const raw = row[schema.gastoLegalSinIva];
+    if(raw !== undefined && raw !== null && String(raw).trim() !== '') return toNum(raw);
+  }
+  return schema.gastoLegal ? toNum(row[schema.gastoLegal]) : 0;
+}
+
 /* ===================== 2. CALCULAR DATOS ===================== */
 function buildData(masterRows, facturaRows, selectedYear){
   const notes = [];
   const execSet = new Set();
   const monthSet = new Set();
 
-  // Detectar columnas flexibles (soporta headers "(29)Ejecutivo" del export real)
-  const sample = masterRows[0] || {};
-  const keys = Object.keys(sample);
-  const colExec   = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
-  const colNuevo  = keys.find(k => /cliente\s*nuevo/i.test(k)) || '(24)Cliente nuevo';
-  const colCli    = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
-  const colFecha  = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
-  const colInteres= keys.find(k => /\(41\)/.test(k)) || keys.find(k => /interes/i.test(k) && !/tasa/i.test(k)) || null;
-  const colMonto  = keys.find(k => /\(45\).*anticipo/i.test(k) || /^monto anticipo$/i.test(k)) || keys.find(k => /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
-  const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
-  const colGiro   = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
-  const colColocado = keys.find(k => /colocado\s*mes/i.test(k)) || null;
-  const colLegal = keys.find(k => /\(34\)/.test(k) || /gasto\s*legal.*comisi/i.test(k));
-  const colGastoOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
-  const colDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
+  // Resolver columnas del maestro nuevo y mantener compatibilidad con versiones anteriores.
+  const schema = resolveMasterSchema(masterRows);
+  const keys = schema.keys;
+  const colExec = schema.exec;
+  const colNuevo = schema.clienteNuevoMes;
+  const colCli = schema.cliente;
+  const colFecha = schema.fechaCreacion;
+  const colInteres = schema.interes;
+  const colMonto = schema.montoAnticipo;
+  const colMontoAlt = schema.montoFinalAdelantado;
+  const colGiro = schema.montoGiro;
+  const colColocado = schema.colocadoMes;
+  const colLegal = schema.gastoLegal;
+  const colLegalSinIva = schema.gastoLegalSinIva;
+  const colGastoOp = schema.gastoOperacion;
+  const colDealer = schema.gastoDealer;
 
   masterRows.forEach(r => {
     const e = r[colExec] || '';
     if(e) execSet.add(e);
-    const ym = parseYM(r[colFecha]);
+    const ym = masterPeriodYM(r, schema);
     if(ym) monthSet.add(ym);
   });
 
@@ -1934,20 +2007,23 @@ function buildData(masterRows, facturaRows, selectedYear){
   masterRows.forEach(r => {
     const e = r[colExec] || '';
     if(!e || !summary.ejecutivos[e]) return;
-    const ym = parseYM(r[colFecha]);
+    const ym = masterPeriodYM(r, schema);
     if(!ym || !summary.ejecutivos[e].months[ym]) return;
 
     const cliName = String(r[colCli] || '').trim();
     const dOp = parseFullDate(r[colFecha]);
+    const declaredNewYm = masterDeclaredNewYM(r, schema);
     let esPrimera = false;
-    if(cliName && dOp && firstOpMap[cliName]){
+    if(cliName && declaredNewYm){
+      // Nuevo maestro: (24) Cliente nuevo contiene el YYYY-MM real del alta.
+      esPrimera = declaredNewYm === ym;
+    } else if(cliName && dOp && firstOpMap[cliName]){
+      // Compatibilidad histórica: inferir por la primera fecha de operación.
       const day = new Date(dOp.getFullYear(), dOp.getMonth(), dOp.getDate());
       esPrimera = day.getTime() === firstOpMap[cliName].getTime();
     }
 
-    let monto = toNum(r[colMonto]);
-    if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
-    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
+    const monto = masterMontoAnticipo(r, schema);
     const dif = colInteres ? toNum(r[colInteres]) : 0;
 
     const cell = summary.ejecutivos[e].months[ym];
@@ -1987,7 +2063,7 @@ function buildData(masterRows, facturaRows, selectedYear){
       }
     }
     let comis = 0;
-    if(colLegal) comis += toNum(r[colLegal]);
+    comis += masterGastoLegalSinIva(r, schema);
     if(colGastoOp) comis += toNum(r[colGastoOp]);
     if(colDealer) comis += toNum(r[colDealer]);
 
@@ -2013,7 +2089,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     summary.total.accum.comisiones += comis;
   });
 
-  const missing = months.filter(m => !masterRows.some(r => parseYM(r[colFecha]) === m));
+  const missing = months.filter(m => !masterRows.some(r => masterPeriodYM(r, schema) === m));
   if(missing.length && missing.length < 12){
     notes.push('Sin registros en: ' + missing.map(m => labelMonthShort(m)).join(', ') + '. Se muestran como 0.');
   } else if(missing.length === 12){
@@ -2021,8 +2097,10 @@ function buildData(masterRows, facturaRows, selectedYear){
   }
   if(colInteres){
     notes.push('Se utilizó la columna "' + colInteres + '" como Diferencia de precio (interés).');
+    notes.push('Período mensual: se usa (23) Colocado mes; si falta, se usa (47) Fecha creación.');
     notes.push('Monto anticipo: se usa (45); si viene 0, se toma (43) Monto final adelantado o (46) Monto a giro real.');
-    notes.push('Cliente nuevo: se cuenta 1 vez por empresa (solicitante) solo en su primera operación del maestro (fecha de creación más antigua).');
+    notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
+    if(colLegalSinIva) notes.push('Gasto legal: se prioriza (60) Gasto legal Comisión RC (sin IVA); si falta, se usa (34).');
   } else {
     notes.push('No se encontró columna de interés en el maestro; Diferencia de precio = 0.');
   }
@@ -2326,15 +2404,14 @@ function downloadResumenCSV(){
     alert('No hay datos del maestro cargados. Pulsa "Actualizar desde CSV" e intenta de nuevo.');
     return;
   }
-  const sample = masterRowsCache[0] || {};
-  const keys = Object.keys(sample);
-  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
-  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
+  const schema = resolveMasterSchema(masterRowsCache);
+  const keys = schema.keys;
+  const colExec = schema.exec;
 
   const yearStr = String(selectedYear);
   const rows = masterRowsCache.filter(r => {
     if(currentExec !== 'ALL' && (r[colExec] || '') !== currentExec) return false;
-    const ym = parseYM(r[colFecha]);
+    const ym = masterPeriodYM(r, schema);
     if(!ym) return false;
     return ym.slice(0, 4) === yearStr;
   });
@@ -2561,16 +2638,13 @@ function sumMetrics(list){
 
 /** Primera fecha de creación por Empresa solicitante (sobre todo el maestro, sin filtro de ejecutivo). */
 function buildClientFirstOpMap(){
-  const map = {}; // cliente -> Date (primera op)
+  const map = {}; // cliente -> Date (primera op visible en el maestro)
   if(!masterRowsCache || !masterRowsCache.length) return map;
-  const sample = masterRowsCache[0] || {};
-  const keys = Object.keys(sample);
-  const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
-  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
+  const schema = resolveMasterSchema(masterRowsCache);
   masterRowsCache.forEach(r => {
-    const cli = String(r[colCli] || '').trim();
+    const cli = String(r[schema.cliente] || '').trim();
     if(!cli) return;
-    const d = parseFullDate(r[colFecha]);
+    const d = parseFullDate(r[schema.fechaCreacion]);
     if(!d) return;
     const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     if(!map[cli] || day < map[cli]) map[cli] = day;
@@ -2586,6 +2660,20 @@ function isFirstOpOfClient(r, colCli, colFecha, firstMap){
   if(!d) return false;
   const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   return day.getTime() === firstMap[cli].getTime();
+}
+
+/**
+ * Cliente nuevo para una fila concreta.
+ * En el maestro nuevo, (24) define el mes de alta. Para día/semana además se
+ * exige que sea la primera fecha visible del cliente, evitando contarlo varias veces.
+ */
+function isNewClientRow(r, schema, firstMap){
+  const cli = String(r[schema.cliente] || '').trim();
+  if(!cli) return false;
+  const declaredYm = masterDeclaredNewYM(r, schema);
+  const opYm = masterPeriodYM(r, schema);
+  if(declaredYm && declaredYm !== opYm) return false;
+  return isFirstOpOfClient(r, schema.cliente, schema.fechaCreacion, firstMap);
 }
 
 function metricsForMonth(ym){
@@ -2607,30 +2695,22 @@ function metricsForMonthRaw(ym){
   if(DATA && DATA.months && DATA.months.indexOf(ym) !== -1){
     return metricsForMonth(ym);
   }
-  // Calcular on-the-fly desde cache
-  const sample = masterRowsCache[0] || {};
-  const keys = Object.keys(sample);
-  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
-  const colNuevo = keys.find(k => /cliente\s*nuevo/i.test(k)) || '(24)Cliente nuevo';
-  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
-  const colInteres = keys.find(k => /\(41\)/.test(k)) || keys.find(k => /interes/i.test(k) && !/tasa/i.test(k)) || null;
-  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
-  const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
-  const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
-  const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+
+  const schema = resolveMasterSchema(masterRowsCache);
   const firstMap = buildClientFirstOpMap();
   const t = emptyMetrics();
   const seen = {};
   const seenActive = {};
-  const colLegal = keys.find(k => /\(34\)/.test(k) || /gasto\s*legal.*comisi/i.test(k));
-  const colOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
-  const colDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
+
   masterRowsCache.forEach(r => {
-    const e = r[colExec] || '';
+    const e = r[schema.exec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
-    if(parseYM(r[colFecha]) !== ym) return;
-    const cli = String(r[colCli]||'').trim();
-    if(cli && isFirstOpOfClient(r, colCli, colFecha, firstMap) && !seen[cli]){
+    if(masterPeriodYM(r, schema) !== ym) return;
+
+    const cli = String(r[schema.cliente] || '').trim();
+    const declaredNewYm = masterDeclaredNewYM(r, schema);
+    const isNew = declaredNewYm ? (declaredNewYm === ym) : isFirstOpOfClient(r, schema.cliente, schema.fechaCreacion, firstMap);
+    if(cli && isNew && !seen[cli]){
       seen[cli] = true;
       t.clientes_nuevos += 1;
     }
@@ -2638,15 +2718,13 @@ function metricsForMonthRaw(ym){
       seenActive[cli] = true;
       t.clientes_activos += 1;
     }
+
     t.operaciones += 1;
-    let monto = toNum(r[colMonto]);
-    if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
-    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
-    t.monto_fin += monto;
-    t.dif_precio += colInteres ? toNum(r[colInteres]) : 0;
-    if(colLegal) t.comisiones += toNum(r[colLegal]);
-    if(colOp) t.comisiones += toNum(r[colOp]);
-    if(colDealer) t.comisiones += toNum(r[colDealer]);
+    t.monto_fin += masterMontoAnticipo(r, schema);
+    t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
+    t.comisiones += masterGastoLegalSinIva(r, schema);
+    if(schema.gastoOperacion) t.comisiones += toNum(r[schema.gastoOperacion]);
+    if(schema.gastoDealer) t.comisiones += toNum(r[schema.gastoDealer]);
   });
   return t;
 }
@@ -2660,32 +2738,21 @@ function metricsForDateRange(fromStr, toStr){
   const startFrom = from ? new Date(from.getFullYear(), from.getMonth(), from.getDate()) : null;
   const endTo = to ? new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999) : null;
 
-  const sample = masterRowsCache[0] || {};
-  const keys = Object.keys(sample);
-  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
-  const colNuevo = keys.find(k => /cliente\s*nuevo/i.test(k)) || '(24)Cliente nuevo';
-  const colFecha = keys.find(k => /fecha\s*creacion/i.test(k)) || '(47)Fecha creacion';
-  const colInteres = keys.find(k => /\(41\)/.test(k)) || keys.find(k => /interes/i.test(k) && !/tasa/i.test(k)) || null;
-  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k)) || 'Monto anticipo';
-  const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k)) || null;
-  const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k)) || null;
-
-  const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
+  const schema = resolveMasterSchema(masterRowsCache);
   const firstMap = buildClientFirstOpMap();
   const seen = {};
   const seenActive = {};
-  const colLegal = keys.find(k => /\(34\)/.test(k) || /gasto\s*legal.*comisi/i.test(k));
-  const colOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
-  const colDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
+
   masterRowsCache.forEach(r => {
-    const e = r[colExec] || '';
+    const e = r[schema.exec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
-    const d = parseFullDate(r[colFecha]);
+    const d = parseFullDate(r[schema.fechaCreacion]);
     if(!d) return;
     if(startFrom && d < startFrom) return;
     if(endTo && d > endTo) return;
-    const cli = String(r[colCli]||'').trim();
-    if(cli && isFirstOpOfClient(r, colCli, colFecha, firstMap) && !seen[cli]){
+
+    const cli = String(r[schema.cliente] || '').trim();
+    if(cli && isNewClientRow(r, schema, firstMap) && !seen[cli]){
       seen[cli] = true;
       t.clientes_nuevos += 1;
     }
@@ -2693,15 +2760,13 @@ function metricsForDateRange(fromStr, toStr){
       seenActive[cli] = true;
       t.clientes_activos += 1;
     }
+
     t.operaciones += 1;
-    let monto = toNum(r[colMonto]);
-    if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
-    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
-    t.monto_fin += monto;
-    t.dif_precio += colInteres ? toNum(r[colInteres]) : 0;
-    if(colLegal) t.comisiones += toNum(r[colLegal]);
-    if(colOp) t.comisiones += toNum(r[colOp]);
-    if(colDealer) t.comisiones += toNum(r[colDealer]);
+    t.monto_fin += masterMontoAnticipo(r, schema);
+    t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
+    t.comisiones += masterGastoLegalSinIva(r, schema);
+    if(schema.gastoOperacion) t.comisiones += toNum(r[schema.gastoOperacion]);
+    if(schema.gastoDealer) t.comisiones += toNum(r[schema.gastoDealer]);
   });
   return t;
 }
@@ -2739,18 +2804,22 @@ function yearAverageMetrics(year){
     const m = metricsForMonthRaw(ym);
     if(m.operaciones > 0 || m.monto_fin > 0){
       sums.clientes_nuevos += m.clientes_nuevos;
+      sums.clientes_activos += m.clientes_activos;
       sums.operaciones += m.operaciones;
       sums.monto_fin += m.monto_fin;
       sums.dif_precio += m.dif_precio;
+      sums.comisiones += m.comisiones;
       n++;
     }
   });
   if(n === 0) return emptyMetrics();
   return {
     clientes_nuevos: sums.clientes_nuevos / n,
+    clientes_activos: sums.clientes_activos / n,
     operaciones: sums.operaciones / n,
     monto_fin: sums.monto_fin / n,
-    dif_precio: sums.dif_precio / n
+    dif_precio: sums.dif_precio / n,
+    comisiones: sums.comisiones / n
   };
 }
 
@@ -3009,7 +3078,7 @@ function updateContextBars(){
   set('ctxResumenPill', 'ctxResumenText',
     'Año ' + year + ' · ' + fl,
     'Tabla del <b>año ' + year + '</b>' + (currentExec === 'ALL' ? ' con todos los ejecutivos' : ' solo de <b>' + fl + '</b>')
-    + '. Cada mes agrupa operaciones por fecha de creación. La última columna es el acumulado de los 12 meses. '
+    + '. Cada mes agrupa operaciones según “Colocado mes” del maestro (con respaldo en Fecha creación si el campo viene vacío). La última columna es el acumulado de los 12 meses. '
     + 'Cambia de año con las flechas ‹ › de la barra superior.'
   );
 
@@ -3894,10 +3963,12 @@ function renderComisiones(){
 
   const sample = rows[0];
   const keys = Object.keys(sample);
+  const schema = resolveMasterSchema(rows);
   const colRC = keys.find(k => /\(35\)/.test(k) || /^comisi[oó]n\s*rc$/i.test(k.replace(/^\(\d+\)/,''))) || keys.find(k => /comisi[oó]n\s*rc/i.test(k));
-  const colGastoLegal = keys.find(k => /\(34\)/.test(k) || /gasto\s*legal.*comisi/i.test(k));
-  const colGastoOp = keys.find(k => /\(36\)/.test(k) || /gasto\s*operaci[oó]n\s*\(sin/i.test(k));
-  const colGastoDealer = keys.find(k => /\(37\)/.test(k) || /gasto\s*operacion\s*dealer/i.test(k));
+  const colGastoLegal = schema.gastoLegal;
+  const colGastoLegalSinIva = schema.gastoLegalSinIva;
+  const colGastoOp = schema.gastoOperacion;
+  const colGastoDealer = schema.gastoDealer;
 
   // (35) Comisión RC es una TASA (%), no un monto en CLP (ej. 0.60, 1.50, 2.35).
   // Sumarla junto a los gastos en pesos producía un total sin sentido (ej. "$29").
@@ -3914,7 +3985,7 @@ function renderComisiones(){
       rcBase += base;
       rcCount += 1;
     }
-    if(colGastoLegal) legal += toNum(r[colGastoLegal]);
+    legal += masterGastoLegalSinIva(r, schema);
     if(colGastoOp) op += toNum(r[colGastoOp]);
     if(colGastoDealer) dealer += toNum(r[colGastoDealer]);
   });
@@ -3932,7 +4003,7 @@ function renderComisiones(){
   `;
   tbody.innerHTML = `
     <tr><td class="left">Comisión RC (35) — tasa promedio</td><td>${fmtInt(rcCount)}</td><td>${rcAvgPct.toFixed(2).replace('.',',')}%</td></tr>
-    <tr><td class="left">Gasto legal Comisión RC</td><td>${fmtInt(n)}</td><td>${fmtCLP(legal)}</td></tr>
+    <tr><td class="left">Gasto legal Comisión RC (sin IVA)</td><td>${fmtInt(n)}</td><td>${fmtCLP(legal)}</td></tr>
     <tr><td class="left">Gasto operación (sin IVA)</td><td>${fmtInt(n)}</td><td>${fmtCLP(op)}</td></tr>
     <tr><td class="left">Gasto operación dealer</td><td>${fmtInt(n)}</td><td>${fmtCLP(dealer)}</td></tr>
     <tr class="total-row"><td class="left">Total gastos (CLP)</td><td>${fmtInt(n)}</td><td>${fmtCLP(total)}</td></tr>
