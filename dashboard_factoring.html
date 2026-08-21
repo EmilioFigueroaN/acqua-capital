@@ -1476,6 +1476,9 @@ select#execFilter:focus-visible{
       <div class="table-scroll">
         <table id="tbl-excedente-retenido"></table>
       </div>
+      <div class="chart-download-row">
+        <button type="button" id="btnDownloadExcedentes" class="btn-refresh" title="Descargar las filas visibles de excedentes en CSV">⬇ Descargar excedentes (CSV)</button>
+      </div>
     </div>
 
     <div class="card" style="margin-top:18px;">
@@ -4238,6 +4241,7 @@ function renderExcedenteRetenido(){
   const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
   if(!rows.length){
     table.innerHTML = '<tbody><tr><td class="left" style="font-weight:400;color:#6b7a8c">Sin datos del maestro para el filtro actual.</td></tr></tbody>';
+    window._excedentesExportRows = null;
     return;
   }
 
@@ -4255,6 +4259,7 @@ function renderExcedenteRetenido(){
       !colMonto ? '(32) Monto retenido (garantía)' : ''
     ].filter(Boolean).join(', ');
     table.innerHTML = `<tbody><tr><td class="left" style="font-weight:400;color:#c04545">No se encontró ${faltan} en el maestro.</td></tr></tbody>`;
+    window._excedentesExportRows = null;
     return;
   }
 
@@ -4292,9 +4297,11 @@ function renderExcedenteRetenido(){
 
   let totalMonto = 0;
   let body = '';
+  const exportRows = [['Empresa', 'Folio', 'Estado excedente', 'Monto retenido (garantía)']];
 
   detalle.forEach(x => {
     totalMonto += x.monto;
+    exportRows.push([x.empresa, x.folio || '', x.estado, Math.round(x.monto)]);
     body += `<tr>
       <td class="left">${escapeHtml(x.empresa)}</td>
       <td>${escapeHtml(x.folio || '—')}</td>
@@ -4320,6 +4327,19 @@ function renderExcedenteRetenido(){
     <th class="left">Estado excedente</th>
     <th>Monto retenido (garantía)</th>
   </tr></thead><tbody>${body}</tbody>`;
+
+  // El CSV refleja exactamente las filas visibles bajo el filtro de Estado excedente.
+  window._excedentesExportRows = detalle.length ? exportRows : null;
+}
+
+function downloadExcedentesCSV(){
+  if(!window._excedentesExportRows || window._excedentesExportRows.length <= 1){
+    alert('No hay filas de excedentes visibles para descargar.');
+    return;
+  }
+  const filtro = document.getElementById('factExcedenteFilter')?.value || 'ALL';
+  const suffix = filtro === 'ALL' ? 'todos' : filtro.toLowerCase().replace(/\s+/g, '_');
+  downloadCSV('excedentes_' + suffix + '.csv', window._excedentesExportRows);
 }
 
 
@@ -5668,6 +5688,8 @@ if(btnDownloadMora) btnDownloadMora.addEventListener('click', downloadMoraCSV);
 const btnDownloadDetalleFact = document.getElementById('btnDownloadDetalleFact');
 if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', downloadFacturasDetalleCSV);
 
+const btnDownloadExcedentes = document.getElementById('btnDownloadExcedentes');
+if(btnDownloadExcedentes) btnDownloadExcedentes.addEventListener('click', downloadExcedentesCSV);
 
 
 function refreshFacturasSection(){
