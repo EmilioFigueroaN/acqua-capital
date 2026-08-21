@@ -1478,7 +1478,7 @@ select#execFilter:focus-visible{
     <p class="sec-desc">Seguimiento de operaciones vendidas y asignadas a fondos. La tabla muestra cada operación individual, su saldo pendiente, vencimiento, estado de cartera, pago y fondo final.</p>
     <div class="ctx-bar" id="ctxCarteraVendida">
       <span class="ctx-pill" id="ctxCarteraVendidaPill">—</span>
-      <span class="ctx-text" id="ctxCarteraVendidaText">Fuente: Google Sheet “Cartera vendida”. Esta fuente no incluye una columna de ejecutivo, por lo que el filtro general de ejecutivo no modifica esta sección.</span>
+      <span class="ctx-text" id="ctxCarteraVendidaText">Fuente: Google Sheet “Cartera vendida”, pestaña “Cartera”. Esta fuente no incluye una columna de ejecutivo, por lo que el filtro general de ejecutivo no modifica esta sección.</span>
     </div>
     <div class="card">
       <div class="sec-filters" id="carteraVendidaFilters" style="margin-bottom:12px;">
@@ -1810,7 +1810,14 @@ const CSV_MASTER   = 'https://docs.google.com/spreadsheets/d/1KMe9OtGopZtLp6m_6n
 const CSV_FACTURAS = 'https://docs.google.com/spreadsheets/d/1S6qAvQwiLExVcqah4PDgK-jDUefCHcOEphS0kUOROwI/export?format=csv';
 const CSV_TAREAS   = 'https://docs.google.com/spreadsheets/d/1Dp00vNV4xwQhuJvMnohpiupu22hsWGXxcF-FVph2Lpo/export?format=csv';
 const CSV_METAS    = 'https://docs.google.com/spreadsheets/d/1Ccq_1MIsV5MPsf5_3OA92g0IVnDg8LaE_jNfHR3FRVc/export?format=csv';
-const CSV_CARTERA_VENDIDA = 'https://docs.google.com/spreadsheets/d/17OD350eE3F3hPJMI90uXFV6YCev09mGA/export?format=csv&gid=0';
+const CARTERA_VENDIDA_SHEET_ID = '17OD350eE3F3hPJMI90uXFV6YCev09mGA';
+const CARTERA_VENDIDA_SHEET_NAME = 'Cartera';
+const CSV_CARTERA_VENDIDA = 'https://docs.google.com/spreadsheets/d/' + CARTERA_VENDIDA_SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(CARTERA_VENDIDA_SHEET_NAME);
+const CSV_CARTERA_VENDIDA_CANDIDATES = [
+  CSV_CARTERA_VENDIDA,
+  'https://docs.google.com/spreadsheets/d/' + CARTERA_VENDIDA_SHEET_ID + '/export?format=csv',
+  'https://docs.google.com/spreadsheets/d/' + CARTERA_VENDIDA_SHEET_ID + '/export?format=csv&gid=0'
+];
 
 /** Añade cache-bust a URL local o de Google Sheets */
 function csvUrl(base){
@@ -2053,7 +2060,7 @@ function masterDeclaredNewYM(row, schema){
  * que corresponde a la fecha de la transacción. No se usa (23) Colocado mes.
  */
 function masterActiveClientYM(row, schema){
-  if(!row || !schema || !schema.fechaCreacion) return !null;
+  if(!row || !schema || !schema.fechaCreacion) return null;
   return parseYM(row[schema.fechaCreacion]);
 }
 
@@ -5248,16 +5255,13 @@ async function loadFromCSV(){
     carteraVendidaLoadError = '';
     if(isGerente()){
       try{
-        const rcv = await fetch(csvUrl(CSV_CARTERA_VENDIDA), { signal: controller.signal, cache: 'no-store' });
-        if(rcv.ok){
-          const tcv = await rcv.text();
-          const parsedCv = parseCSV(tcv);
-          if(parsedCv.length){
-            carteraVendidaRowsCache = parsedCv;
-            csvFingerprints.carteraVendida = simpleHash(tcv);
-          }
-        } else {
-          carteraVendidaLoadError = 'HTTP ' + rcv.status;
+        const cvResult = await fetchCarteraVendidaText(controller.signal);
+        const tcv = cvResult.text;
+        const parsedCv = parseCSV(tcv);
+        if(parsedCv.length){
+          carteraVendidaRowsCache = parsedCv;
+          csvFingerprints.carteraVendida = simpleHash(tcv);
+          carteraVendidaLoadError = '';
         }
       } catch(e){
         carteraVendidaLoadError = e && e.message ? e.message : String(e);
@@ -5351,6 +5355,43 @@ async function fetchTextNoCache(url){
   return res.text();
 }
 
+/**
+ * Carga Cartera vendida probando varias rutas de Google Sheets.
+ * La pestaña del archivo adjunto se llama "Cartera"; por eso se prioriza
+ * gviz por nombre de hoja y no un gid fijo que puede no existir.
+ */
+async function fetchCarteraVendidaText(signal){
+  const errores = [];
+  for(const url of CSV_CARTERA_VENDIDA_CANDIDATES){
+    try{
+      const res = await fetch(csvUrl(url), { cache:'no-store', signal });
+      if(!res.ok){
+        errores.push('HTTP ' + res.status + ' en ' + url);
+        continue;
+      }
+      const txt = await res.text();
+      // Evita aceptar una página HTML de login/error como si fuera CSV.
+      if(!txt || /^\s*<!doctype html/i.test(txt) || /^\s*<html/i.test(txt)){
+        errores.push('Respuesta no CSV en ' + url);
+        continue;
+      }
+      const parsed = parseCSV(txt);
+      if(!parsed.length){
+        errores.push('CSV vacío en ' + url);
+        continue;
+      }
+      return { text:txt, url };
+    } catch(e){
+      if(e && e.name === 'AbortError') throw e;
+      errores.push((e && e.message) ? e.message : String(e));
+    }
+  }
+  throw new Error(
+    (errores.length ? errores.join(' · ') : 'No fue posible leer la fuente') +
+    '. Si el archivo sigue guardado como Excel (.xlsx) en Drive, conviértelo a Google Sheets nativo para habilitar la exportación CSV.'
+  );
+}
+
 async function checkCsvUpdates(silent){
   if(autoRefreshBusy) return;
   if(!SESSION) return; // solo con sesión activa
@@ -5362,7 +5403,7 @@ async function checkCsvUpdates(silent){
       fetchTextNoCache(CSV_TAREAS).catch(() => null),
       fetchTextNoCache(CSV_USERS).catch(() => null),
       fetchTextNoCache(CSV_METAS).catch(() => null),
-      isGerente() ? fetchTextNoCache(CSV_CARTERA_VENDIDA).catch(() => null) : Promise.resolve(null)
+      isGerente() ? fetchCarteraVendidaText().then(r => r.text).catch(() => null) : Promise.resolve(null)
     ]);
 
     let changedOps = false;
