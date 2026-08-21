@@ -1339,8 +1339,8 @@ select#execFilter:focus-visible{
     <div class="card" style="margin-top:18px;">
       <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 18px;margin-bottom:12px;">
         <div>
-          <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Excedentes · Monto retenido</h3>
-          <p style="font-size:12px;color:var(--ink-soft);margin:0;">Resumen según <b>(17) Excedentes</b>. El monto corresponde exclusivamente a <b>(32) Monto retenido (garantía)</b>.</p>
+          <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Excedentes por empresa</h3>
+          <p style="font-size:12px;color:var(--ink-soft);margin:0;">Detalle por empresa usando <b>(26) Empresa solicitante</b>, el estado de <b>(17) Excedentes</b> y el monto de <b>(32) Monto retenido (garantía)</b>.</p>
         </div>
         <div style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <label for="factExcedenteFilter" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Estado excedente</label>
@@ -3933,66 +3933,71 @@ function renderExcedenteRetenido(){
   }
 
   const keys = Object.keys(rows[0] || {});
+  const colEmpresa = keys.find(k => /^\(26\)\s*Empresa\s*solicitante/i.test(k)) || keys.find(k => /Empresa\s*solicitante/i.test(k));
   const colEstado = keys.find(k => /^\(17\)\s*Excedentes/i.test(k)) || keys.find(k => /Excedentes/i.test(k));
   const colMonto = keys.find(k => /^\(32\)\s*Monto\s*retenido\s*\(garant[ií]a\)/i.test(k)) || keys.find(k => /Monto\s*retenido.*garant/i.test(k));
 
-  if(!colEstado || !colMonto){
-    const faltan = [!colEstado ? '(17) Excedentes' : '', !colMonto ? '(32) Monto retenido (garantía)' : ''].filter(Boolean).join(' y ');
+  if(!colEmpresa || !colEstado || !colMonto){
+    const faltan = [
+      !colEmpresa ? '(26) Empresa solicitante' : '',
+      !colEstado ? '(17) Excedentes' : '',
+      !colMonto ? '(32) Monto retenido (garantía)' : ''
+    ].filter(Boolean).join(', ');
     table.innerHTML = `<tbody><tr><td class="left" style="font-weight:400;color:#c04545">No se encontró ${faltan} en el maestro.</td></tr></tbody>`;
     return;
   }
 
   const filtro = document.getElementById('factExcedenteFilter')?.value || 'ALL';
-  const estados = ['Disponible','No generado','Entregado'];
-  const agg = {
-    'Disponible': { ops:0, monto:0 },
-    'No generado': { ops:0, monto:0 },
-    'Entregado': { ops:0, monto:0 }
-  };
+  const estadosValidos = new Set(['Disponible','No generado','Entregado']);
+
+  // Agrupa por empresa + estado para evitar repetir una misma empresa varias
+  // veces cuando tiene múltiples operaciones con el mismo estado.
+  const byEmpresaEstado = new Map();
 
   rows.forEach(r => {
+    const empresa = String(r[colEmpresa] || '').trim() || 'Sin empresa';
     const estado = String(r[colEstado] || '').trim();
-    if(!agg[estado]) return;
-    agg[estado].ops += 1;
-    agg[estado].monto += parseMasterCLP(r[colMonto]);
+    if(!estadosValidos.has(estado)) return;
+    if(filtro !== 'ALL' && estado !== filtro) return;
+
+    const key = empresa + '\u0000' + estado;
+    if(!byEmpresaEstado.has(key)){
+      byEmpresaEstado.set(key, { empresa, estado, monto:0 });
+    }
+    byEmpresaEstado.get(key).monto += parseMasterCLP(r[colMonto]);
   });
 
-  const totalGlobal = estados.reduce((s,e) => s + agg[e].monto, 0);
-  const visibles = filtro === 'ALL' ? estados : estados.filter(e => e === filtro);
-  let body = '';
-  let totalOps = 0;
-  let totalMonto = 0;
+  const detalle = Array.from(byEmpresaEstado.values()).sort((a,b) => {
+    const c = a.empresa.localeCompare(b.empresa, 'es', { sensitivity:'base' });
+    return c !== 0 ? c : a.estado.localeCompare(b.estado, 'es', { sensitivity:'base' });
+  });
 
-  visibles.forEach(estado => {
-    const x = agg[estado];
-    const pct = totalGlobal > 0 ? x.monto / totalGlobal * 100 : 0;
-    totalOps += x.ops;
+  let totalMonto = 0;
+  let body = '';
+
+  detalle.forEach(x => {
     totalMonto += x.monto;
     body += `<tr>
-      <td class="left">${estado}</td>
-      <td>${fmtInt(x.ops)}</td>
+      <td class="left">${escapeHtml(x.empresa)}</td>
+      <td class="left" style="font-weight:400">${escapeHtml(x.estado)}</td>
       <td>${fmtCLP(x.monto)}</td>
-      <td>${pct.toFixed(1).replace('.',',')}%</td>
     </tr>`;
   });
 
   if(!body){
-    body = '<tr><td colspan="4" style="text-align:center;color:#6b7a8c">Sin registros para el estado seleccionado.</td></tr>';
+    body = '<tr><td colspan="3" style="text-align:center;color:#6b7a8c">Sin empresas para el estado seleccionado.</td></tr>';
   } else {
-    const pctTotal = totalGlobal > 0 ? totalMonto / totalGlobal * 100 : 0;
     body += `<tr class="total-row">
-      <td class="left">Total${filtro === 'ALL' ? '' : ' filtrado'}</td>
-      <td>${fmtInt(totalOps)}</td>
+      <td class="left">Total</td>
+      <td></td>
       <td>${fmtCLP(totalMonto)}</td>
-      <td>${pctTotal.toFixed(1).replace('.',',')}%</td>
     </tr>`;
   }
 
   table.innerHTML = `<thead><tr>
+    <th class="left">Empresa</th>
     <th class="left">Estado excedente</th>
-    <th>Operaciones</th>
     <th>Monto retenido (garantía)</th>
-    <th>% del total</th>
   </tr></thead><tbody>${body}</tbody>`;
 }
 
