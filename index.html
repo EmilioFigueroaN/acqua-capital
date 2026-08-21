@@ -1848,6 +1848,8 @@ function emptyMetrics(){
  *   (10) Abono pyme         -> cliente activo cuando el valor es exactamente 0
  *   (23) Colocado mes       -> YYYY-MM del período de la operación
  *   (24) Cliente nuevo      -> YYYY-MM del alta del cliente
+ *   (33) Monto a financiar  -> base del Monto anticipo
+ *   (10) Abono pyme         -> se descuenta de (33)
  *   (60) Gasto legal ...    -> gasto legal sin IVA
  *
  * Se mantienen fallbacks por nombre y por las columnas anteriores para que
@@ -1874,6 +1876,7 @@ function resolveMasterSchema(rows){
     clienteNuevoMes: findMasterHeader(keys, [/^\(24\).*Cliente\s*nuevo/i, /Cliente\s*nuevo/i], null),
     fechaCreacion: findMasterHeader(keys, [/^\(47\).*Fecha\s*creaci[oó]n/i, /Fecha\s*creaci[oó]n/i], '(47)Fecha creacion'),
     interes: findMasterHeader(keys, [/^\(41\).*Inter[eé]s/i, /^Inter[eé]s$/i, /Inter[eé]s/i], null),
+    montoAFinanciar: findMasterHeader(keys, [/^\(33\).*Monto\s*a\s*financiar/i, /^Monto\s*a\s*financiar$/i, /Monto\s*a\s*financiar/i], null),
     montoAnticipo: findMasterHeader(keys, [/^\(45\).*Monto\s*anticipo/i, /^Monto\s*anticipo$/i, /Monto\s*anticipo/i], 'Monto anticipo'),
     montoFinalAdelantado: findMasterHeader(keys, [/^\(43\).*Monto\s*final\s*adelantado/i, /Monto\s*final\s*adelantado/i], null),
     montoGiro: findMasterHeader(keys, [/^\(46\).*Monto\s*a\s*giro/i, /Monto\s*a\s*giro/i], null),
@@ -1922,12 +1925,16 @@ function masterIsActiveClientRow(row, schema){
   return toNum(raw) === 0;
 }
 
+/**
+ * Monto anticipo (definición operativa vigente):
+ *   (33) Monto a financiar - (10) Abono pyme
+ *
+ * Se calcula fila a fila y luego se agrega por período/ejecutivo.
+ * No se usa (45) Monto anticipo ni los antiguos fallbacks (43)/(46).
+ */
 function masterMontoAnticipo(row, schema){
-  if(!row || !schema) return 0;
-  let monto = schema.montoAnticipo ? toNum(row[schema.montoAnticipo]) : 0;
-  if(monto === 0 && schema.montoFinalAdelantado) monto = toNum(row[schema.montoFinalAdelantado]);
-  if(monto === 0 && schema.montoGiro) monto = toNum(row[schema.montoGiro]);
-  return monto;
+  if(!row || !schema || !schema.montoAFinanciar || !schema.abonoPyme) return 0;
+  return toNum(row[schema.montoAFinanciar]) - toNum(row[schema.abonoPyme]);
 }
 
 function masterGastoLegalSinIva(row, schema){
@@ -1953,9 +1960,6 @@ function buildData(masterRows, facturaRows, selectedYear){
   const colCli = schema.cliente;
   const colFecha = schema.fechaCreacion;
   const colInteres = schema.interes;
-  const colMonto = schema.montoAnticipo;
-  const colMontoAlt = schema.montoFinalAdelantado;
-  const colGiro = schema.montoGiro;
   const colColocado = schema.colocadoMes;
   const colLegal = schema.gastoLegal;
   const colLegalSinIva = schema.gastoLegalSinIva;
@@ -2135,7 +2139,7 @@ function buildData(masterRows, facturaRows, selectedYear){
   if(colInteres){
     notes.push('Se utilizó la columna "' + colInteres + '" como Diferencia de precio (interés).');
     notes.push('Período mensual: se usa (23) Colocado mes; si falta, se usa (47) Fecha creación.');
-    notes.push('Monto anticipo: se usa (45); si viene 0, se toma (43) Monto final adelantado o (46) Monto a giro real.');
+    notes.push('Monto anticipo: se calcula por operación como (33) Monto a financiar − (10) Abono pyme.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
     notes.push('Clientes activos: Empresa solicitante distinta con (10) Abono pyme = 0; el período se determina exclusivamente con (47) Fecha creación (fecha de la transacción).');
     if(colLegalSinIva) notes.push('Gasto legal: se prioriza (60) Gasto legal Comisión RC (sin IVA); si falta, se usa (34).');
@@ -3171,25 +3175,14 @@ function renderConcentration(){
   const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
   const colDeu = keys.find(k => /empresa\s*deudora/i.test(k) && !/rut/i.test(k)) || '(28)Empresa deudora';
   const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
-  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
-  const colAlt = keys.find(k => /\(43\)/.test(k) || /monto final adelantado/i.test(k));
-  const colGiro = keys.find(k => /\(46\)/.test(k) || /monto a giro/i.test(k));
-  const colBruto = keys.find(k => /\(12\)/.test(k) || /monto facturas/i.test(k));
-
-  function rowMonto(r){
-    let monto = colMonto ? toNum(r[colMonto]) : 0;
-    if(monto === 0 && colAlt) monto = toNum(r[colAlt]);
-    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
-    if(monto === 0 && colBruto) monto = toNum(r[colBruto]);
-    return monto;
-  }
+  const masterSchema = resolveMasterSchema(rows);
 
   const by = {};
   rows.forEach(r => {
     const cli = ((r[colCli] || 'Sin nombre') + '').trim() || 'Sin nombre';
     const deu = ((r[colDeu] || 'Sin deudor') + '').trim() || 'Sin deudor';
     const exec = ((r[colExec] || 'Sin ejecutivo') + '').trim() || 'Sin ejecutivo';
-    const monto = rowMonto(r);
+    const monto = masterMontoAnticipo(r, masterSchema);
     if(!by[cli]) by[cli] = { total:0, deudores:{}, ejecutivos:{} };
     by[cli].total += monto;
     if(!by[cli].deudores[deu]) by[cli].deudores[deu] = 0;
@@ -3421,9 +3414,7 @@ function renderMora(){
   const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k));
   const colDias = keys.find(k => /d[ií]as\s*de\s*mora/i.test(k) || /\(19\)/.test(k));
   const colComp = keys.find(k => /comportamiento/i.test(k) || /\(18\)/.test(k));
-  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
-  const colMontoAlt = keys.find(k => /\(43\).*adelantado/i.test(k) || /monto final adelantado/i.test(k));
-  const colGiro = keys.find(k => /\(46\).*giro/i.test(k) || /monto a giro/i.test(k));
+  const masterSchema = resolveMasterSchema(masterRowsCache);
 
   if(!colDias){
     tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">No se encontró la columna de días de mora en el maestro.</p>';
@@ -3446,9 +3437,7 @@ function renderMora(){
     let dias = parseInt(String(r[colDias] || '').replace(/[^\d\-]/g,''), 10);
     if(isNaN(dias)) return;
 
-    let monto = toNum(r[colMonto]);
-    if(monto === 0 && colMontoAlt) monto = toNum(r[colMontoAlt]);
-    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
+    const monto = masterMontoAnticipo(r, masterSchema);
 
     let b;
     if(dias <= 0) b = buckets.vigente;
@@ -3695,18 +3684,12 @@ function renderDeudorConcentration(){
   const sample = rows[0] || {};
   const keys = Object.keys(sample);
   const colName = keys.find(k => /empresa\s*deudora/i.test(k) && !/rut/i.test(k)) || '(28)Empresa deudora';
-  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
-  const colAlt = keys.find(k => /\(43\)/.test(k) || /monto final adelantado/i.test(k));
-  const colGiro = keys.find(k => /\(46\)/.test(k) || /monto a giro/i.test(k));
-  const colBruto = keys.find(k => /\(12\)/.test(k) || /monto facturas/i.test(k));
+  const masterSchema = resolveMasterSchema(rows);
 
   const byD = {};
   rows.forEach(r => {
     const name = ((r[colName] || 'Sin deudor') + '').trim() || 'Sin deudor';
-    let monto = colMonto ? toNum(r[colMonto]) : 0;
-    if(monto === 0 && colAlt) monto = toNum(r[colAlt]);
-    if(monto === 0 && colGiro) monto = toNum(r[colGiro]);
-    if(monto === 0 && colBruto) monto = toNum(r[colBruto]);
+    const monto = masterMontoAnticipo(r, masterSchema);
     if(!byD[name]) byD[name] = 0;
     byD[name] += monto;
   });
@@ -4084,19 +4067,15 @@ function renderCarteraSide(kind){
   const colName = kind === 'cliente'
     ? (keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante')
     : (keys.find(k => /empresa\s*deudora/i.test(k)) || '(28)Empresa deudora');
-  const colMonto = keys.find(k => /\(45\).*anticipo/i.test(k) || /monto\s*anticipo/i.test(k));
-  const colAlt = keys.find(k => /\(43\)/.test(k) || /monto final adelantado/i.test(k));
-  const colGiro = keys.find(k => /\(46\)/.test(k) || /monto a giro/i.test(k));
   const colVig = keys.find(k => /\(55\)/.test(k) || /monto vigente/i.test(k));
+  const masterSchema = resolveMasterSchema(rows);
 
   const by = {};
   rows.forEach(r => {
     const name = (r[colName] || 'Sin nombre').trim() || 'Sin nombre';
     let m = colVig ? toNum(r[colVig]) : 0;
     if(m === 0){
-      m = toNum(r[colMonto]);
-      if(m === 0 && colAlt) m = toNum(r[colAlt]);
-      if(m === 0 && colGiro) m = toNum(r[colGiro]);
+      m = masterMontoAnticipo(r, masterSchema);
     }
     by[name] = (by[name] || 0) + m;
   });
