@@ -1330,7 +1330,7 @@ select#execFilter:focus-visible{
   <div class="cluster-label" role="presentation">
     <span class="cluster-kicker">Cluster de prioridad</span>
     <span class="cluster-name">Pipeline comercial</span>
-    <span class="cluster-hint">Oportunidades de anticipo, stock disponible, cesiones y cartera vendida.</span>
+    <span class="cluster-hint">Oportunidades de anticipo, stock disponible y cesiones.</span>
   </div>
 
 <section class="block">
@@ -1468,7 +1468,7 @@ select#execFilter:focus-visible{
   </section>
 
 
-<section class="block" id="secCarteraVendida">
+<section class="block gerencia-only" id="secCarteraVendida" hidden>
     <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Cartera vendida</h2></div>
     <p class="sec-desc">Seguimiento de operaciones vendidas y asignadas a fondos. La tabla muestra cada operación individual, su saldo pendiente, vencimiento, estado de cartera, pago y fondo final.</p>
     <div class="ctx-bar" id="ctxCarteraVendida">
@@ -1684,6 +1684,25 @@ function clearSession(){
 function isGerente(){ return SESSION && SESSION.rol === 'gerente'; }
 function isEjecutivo(){ return SESSION && SESSION.rol === 'ejecutivo'; }
 
+/**
+ * Cartera vendida es una vista exclusiva de gerencia.
+ * Además de ocultar el bloque, evita cargar/retener sus filas en sesiones de ejecutivo.
+ */
+function applyRoleVisibility(){
+  const sec = document.getElementById('secCarteraVendida');
+  const gerente = !!isGerente();
+  if(sec) sec.hidden = !gerente;
+
+  if(gerente){
+    if(!carteraVendidaRowsCache || !carteraVendidaRowsCache.length){
+      carteraVendidaRowsCache = CARTERA_VENDIDA_FALLBACK.slice();
+    }
+  } else {
+    carteraVendidaRowsCache = [];
+    carteraVendidaLoadError = '';
+  }
+}
+
 function showApp(){
   document.getElementById('loginOverlay').hidden = true;
   document.getElementById('appShell').hidden = false;
@@ -1697,6 +1716,9 @@ function showApp(){
     roleEl.className = 'role-badge' + (SESSION.rol === 'gerente' ? ' gerente' : '');
   }
   if(btnOut) btnOut.hidden = false;
+
+  // Visibilidad por rol: Cartera vendida es exclusiva de gerencia.
+  applyRoleVisibility();
 
   // Restringir filtro de ejecutivo
   applyRoleToFilters();
@@ -1763,6 +1785,8 @@ function logout(){
   clearSession();
   currentExec = 'ALL';
   DATA = null;
+  carteraVendidaRowsCache = [];
+  carteraVendidaLoadError = '';
   showLogin('');
   document.getElementById('loginNombre').value = '';
   document.getElementById('loginRut').value = '';
@@ -1835,7 +1859,7 @@ let carteraVendidaLoadError = '';
 const CARTERA_VENDIDA_FALLBACK = [{"Originador":"Acqua Capital","RUT Cliente":"76180516-9","Cliente":"Construcciones Proyectsur Limitada","RUT Deudor":"77381500-3","Deudor":"Ria Austral S.A.","Folio":813,"Monto Operación":11164580,"Saldo Pendiente":0,"Fecha Vencimiento":"2026-08-03","Días":0,"Estado Cartera":"PAGADA","Estado Pago":"PAGADA","Último Pago":"2026-08-03","Fondo Final":"BCI","Estado Asignación":"BCI","Warren":810,"Categoría":"C","Tasa CF":0.8,"Tasa RC":0.1,"Gastos":4871,"Interés":32749,"A Pago":11126959,"Tasa Efectiva Cobrada":0.92,"Fecha Curse Operación":"2026-07-23"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2231,"Monto Operación":10781038,"Saldo Pendiente":10781038,"Fecha Vencimiento":"2026-08-25","Días":14,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":14112,"Interés":88944,"A Pago":10677982,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-23"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2232,"Monto Operación":10781038,"Saldo Pendiente":10781038,"Fecha Vencimiento":"2026-08-25","Días":14,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":14112,"Interés":88944,"A Pago":10677982,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-23"},{"Originador":"Acqua Capital","RUT Cliente":"76977272-3","Cliente":"Servicios Generales JAS Ltda","RUT Deudor":"96822190-6","Deudor":"Viña San Rafael S.A.","Folio":199,"Monto Operación":25073300,"Saldo Pendiente":25073300,"Fecha Vencimiento":"2026-09-03","Días":23,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BTG","Estado Asignación":"ASIGNADA","Warren":561,"Categoría":"V","Tasa CF":0.91,"Tasa RC":0.12,"Gastos":45353,"Interés":289012,"A Pago":24738936,"Tasa Efectiva Cobrada":1.05,"Fecha Curse Operación":"2026-07-27"},{"Originador":"Acqua Capital","RUT Cliente":"76977272-3","Cliente":"Servicios Generales JAS Ltda","RUT Deudor":"96822190-6","Deudor":"Viña San Rafael S.A.","Folio":200,"Monto Operación":20616750,"Saldo Pendiente":20616750,"Fecha Vencimiento":"2026-09-03","Días":23,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BTG","Estado Asignación":"ASIGNADA","Warren":561,"Categoría":"V","Tasa CF":0.91,"Tasa RC":0.12,"Gastos":37292,"Interés":237642,"A Pago":20341816,"Tasa Efectiva Cobrada":1.05,"Fecha Curse Operación":"2026-07-27"},{"Originador":"Acqua Capital","RUT Cliente":"77779696-8","Cliente":"Impermeabilizaciones y Obras Menores SPA","RUT Deudor":"76318710-1","Deudor":"G y O Ingeniería Limitada","Folio":115,"Monto Operación":3281836,"Saldo Pendiente":3281836,"Fecha Vencimiento":"2026-08-28","Días":17,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BTG","Estado Asignación":"ASIGNADA","Warren":561,"Categoría":"V","Tasa CF":0.91,"Tasa RC":0.12,"Gastos":4999,"Interés":31856,"A Pago":3244981,"Tasa Efectiva Cobrada":1.05,"Fecha Curse Operación":"2026-07-27"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2250,"Monto Operación":5929846,"Saldo Pendiente":5929846,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":10114,"Interés":63746,"A Pago":5855986,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-30"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2249,"Monto Operación":5929846,"Saldo Pendiente":5929846,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":10114,"Interés":63746,"A Pago":5855986,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-30"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2248,"Monto Operación":5612014,"Saldo Pendiente":5612014,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":9572,"Interés":60329,"A Pago":5542113,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-30"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2247,"Monto Operación":5612014,"Saldo Pendiente":5612014,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":9572,"Interés":60329,"A Pago":5542113,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-30"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2246,"Monto Operación":5612014,"Saldo Pendiente":5612014,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":9572,"Interés":60329,"A Pago":5542113,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-30"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2245,"Monto Operación":5612014,"Saldo Pendiente":5612014,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":9572,"Interés":60329,"A Pago":5542113,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-30"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2244,"Monto Operación":5612014,"Saldo Pendiente":5612014,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":9572,"Interés":60329,"A Pago":5542113,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-30"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile SPA","Folio":2243,"Monto Operación":5612014,"Saldo Pendiente":5612014,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":9572,"Interés":60329,"A Pago":5542113,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-07-30"},{"Originador":"Acqua Capital","RUT Cliente":"76454923-6","Cliente":"Avattar Consultora SPA","RUT Deudor":"96805970-K","Deudor":"Evertec Chile","Folio":2262,"Monto Operación":5612014,"Saldo Pendiente":5612014,"Fecha Vencimiento":"2026-09-11","Días":31,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"PENDIENTE","Warren":660,"Categoría":"A","Tasa CF":0.75,"Tasa RC":0.1,"Gastos":8459,"Interés":53314,"A Pago":5550241,"Tasa Efectiva Cobrada":0.87,"Fecha Curse Operación":"2026-08-04"},{"Originador":"Acqua Capital","RUT Cliente":"76278822-5","Cliente":"Construcciones Acuña y Cía. Ltda.","RUT Deudor":"89853600-9","Deudor":"Constructora Ingevec S.A.","Folio":498,"Monto Operación":1883413,"Saldo Pendiente":1883413,"Fecha Vencimiento":"2026-10-02","Días":52,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":651,"Categoría":"E","Tasa CF":0.8,"Tasa RC":0.1,"Gastos":4258,"Interés":28628,"A Pago":1850527,"Tasa Efectiva Cobrada":0.92,"Fecha Curse Operación":"2026-08-06"},{"Originador":"Acqua Capital","RUT Cliente":"76278822-5","Cliente":"Construcciones Acuña y Cía. Ltda.","RUT Deudor":"89853600-9","Deudor":"Constructora Ingevec S.A.","Folio":500,"Monto Operación":2797988,"Saldo Pendiente":2797988,"Fecha Vencimiento":"2026-10-02","Días":52,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":651,"Categoría":"E","Tasa CF":0.8,"Tasa RC":0.1,"Gastos":6326,"Interés":42529,"A Pago":2749132,"Tasa Efectiva Cobrada":0.92,"Fecha Curse Operación":"2026-08-06"},{"Originador":"Acqua Capital","RUT Cliente":"76278822-5","Cliente":"Construcciones Acuña y Cía. Ltda.","RUT Deudor":"89853600-9","Deudor":"Constructora Ingevec S.A.","Folio":503,"Monto Operación":2681546,"Saldo Pendiente":2681546,"Fecha Vencimiento":"2026-08-31","Días":20,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":651,"Categoría":"E","Tasa CF":0.8,"Tasa RC":0.1,"Gastos":2659,"Interés":17877,"A Pago":2661010,"Tasa Efectiva Cobrada":0.92,"Fecha Curse Operación":"2026-08-06"},{"Originador":"Acqua Capital","RUT Cliente":"76278822-5","Cliente":"Construcciones Acuña y Cía. Ltda.","RUT Deudor":"89853600-9","Deudor":"Constructora Ingevec S.A.","Folio":504,"Monto Operación":6788653,"Saldo Pendiente":6788653,"Fecha Vencimiento":"2026-10-20","Días":70,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BCI","Estado Asignación":"ASIGNADA","Warren":651,"Categoría":"E","Tasa CF":0.8,"Tasa RC":0.1,"Gastos":20196,"Interés":135773,"A Pago":6632684,"Tasa Efectiva Cobrada":0.92,"Fecha Curse Operación":"2026-08-06"},{"Originador":"Acqua Capital","RUT Cliente":"76278822-5","Cliente":"Construcciones Acuña y Cía. Ltda.","RUT Deudor":"76832960-5","Deudor":"Inmobiliaria y Constructora Terratec Ltda.","Folio":506,"Monto Operación":4408950,"Saldo Pendiente":4408950,"Fecha Vencimiento":"2026-08-31","Días":20,"Estado Cartera":"VIGENTE","Estado Pago":"IMPAGA","Último Pago":null,"Fondo Final":"BTG","Estado Asignación":"ASIGNADA","Warren":602,"Categoría":"V","Tasa CF":0.91,"Tasa RC":0.12,"Gastos":5247,"Interés":33435,"A Pago":4370269,"Tasa Efectiva Cobrada":1.05,"Fecha Curse Operación":"2026-08-06"}];
 let METAS_BY_MONTH = {}; // { 'YYYY-MM': { 'Nombre ejecutivo' | 'TODOS': {clientes_activos, clientes_nuevos, operaciones, monto_fin, dif_precio} } }
 
-carteraVendidaRowsCache = CARTERA_VENDIDA_FALLBACK.slice();
+carteraVendidaRowsCache = []; // se habilita solo para sesiones de gerencia
 
 /**
  * Construye el mapa de metas a partir de las filas del CSV de metas.
@@ -4325,6 +4349,7 @@ function cvFilteredRows(){
 }
 
 function renderCarteraVendida(){
+  if(!isGerente()) return;
   const table = document.getElementById('tbl-cartera-vendida');
   const kpis = document.getElementById('cvKpis');
   const pill = document.getElementById('ctxCarteraVendidaPill');
@@ -5161,24 +5186,28 @@ async function loadFromCSV(){
     masterRowsCache = masterRows;
     facturaRowsCache = facturaRows;
 
-    // Cartera vendida: fuente adicional del pipeline comercial. Si falla,
-    // se conserva el respaldo incorporado desde el archivo adjunto.
+    // Cartera vendida: fuente exclusiva de gerencia.
+    // Las sesiones de ejecutivo no solicitan ni retienen esta información.
     carteraVendidaLoadError = '';
-    try{
-      const rcv = await fetch(csvUrl(CSV_CARTERA_VENDIDA), { signal: controller.signal, cache: 'no-store' });
-      if(rcv.ok){
-        const tcv = await rcv.text();
-        const parsedCv = parseCSV(tcv);
-        if(parsedCv.length){
-          carteraVendidaRowsCache = parsedCv;
-          csvFingerprints.carteraVendida = simpleHash(tcv);
+    if(isGerente()){
+      try{
+        const rcv = await fetch(csvUrl(CSV_CARTERA_VENDIDA), { signal: controller.signal, cache: 'no-store' });
+        if(rcv.ok){
+          const tcv = await rcv.text();
+          const parsedCv = parseCSV(tcv);
+          if(parsedCv.length){
+            carteraVendidaRowsCache = parsedCv;
+            csvFingerprints.carteraVendida = simpleHash(tcv);
+          }
+        } else {
+          carteraVendidaLoadError = 'HTTP ' + rcv.status;
         }
-      } else {
-        carteraVendidaLoadError = 'HTTP ' + rcv.status;
+      } catch(e){
+        carteraVendidaLoadError = e && e.message ? e.message : String(e);
+        console.warn('No se pudo leer cartera vendida; se usa respaldo:', e);
       }
-    } catch(e){
-      carteraVendidaLoadError = e && e.message ? e.message : String(e);
-      console.warn('No se pudo leer cartera vendida; se usa respaldo:', e);
+    } else {
+      carteraVendidaRowsCache = [];
     }
 
     // Metas: opcional. Si el sheet de metas falla o está vacío, el
@@ -5209,7 +5238,7 @@ async function loadFromCSV(){
     const now = new Date();
     const hh = String(now.getHours()).padStart(2,'0');
     const mm = String(now.getMinutes()).padStart(2,'0');
-    setStatus('Actualizado ' + hh + ':' + mm + ' · ' + DATA.n_rows_master + ' ops · ' + DATA.n_rows_facturas + ' facturas · ' + (carteraVendidaRowsCache?.length || 0) + ' cartera vendida', 'ok');
+    setStatus('Actualizado ' + hh + ':' + mm + ' · ' + DATA.n_rows_master + ' ops · ' + DATA.n_rows_facturas + ' facturas' + (isGerente() ? ' · ' + (carteraVendidaRowsCache?.length || 0) + ' cartera vendida' : ''), 'ok');
   } catch(err){
     const isTimeout = err.name === 'AbortError';
     const message = isTimeout
@@ -5276,7 +5305,7 @@ async function checkCsvUpdates(silent){
       fetchTextNoCache(CSV_TAREAS).catch(() => null),
       fetchTextNoCache(CSV_USERS).catch(() => null),
       fetchTextNoCache(CSV_METAS).catch(() => null),
-      fetchTextNoCache(CSV_CARTERA_VENDIDA).catch(() => null)
+      isGerente() ? fetchTextNoCache(CSV_CARTERA_VENDIDA).catch(() => null) : Promise.resolve(null)
     ]);
 
     let changedOps = false;
@@ -5310,7 +5339,7 @@ async function checkCsvUpdates(silent){
       if(csvFingerprints.metas && csvFingerprints.metas !== h) changedMetas = true;
       csvFingerprints.metas = h;
     }
-    if(tCarteraVendida != null){
+    if(isGerente() && tCarteraVendida != null){
       const h = simpleHash(tCarteraVendida);
       if(csvFingerprints.carteraVendida && csvFingerprints.carteraVendida !== h) changedCarteraVendida = true;
       csvFingerprints.carteraVendida = h;
@@ -5343,7 +5372,7 @@ async function checkCsvUpdates(silent){
         if(DATA) renderMesCurso();
         setStatus('Metas actualizadas · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
       }
-    } else if(changedCarteraVendida){
+    } else if(isGerente() && changedCarteraVendida){
       if(tCarteraVendida != null){
         const parsedCv = parseCSV(tCarteraVendida);
         if(parsedCv.length) carteraVendidaRowsCache = parsedCv;
