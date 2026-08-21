@@ -390,7 +390,7 @@ select#execFilter:focus-visible{
   /* ---------- KPI STRIP ---------- */
   .kpi-grid{
     display:grid;
-    grid-template-columns:repeat(6, 1fr);
+    grid-template-columns:repeat(7, 1fr);
     gap:12px;
     margin-top:22px;
   }
@@ -1133,6 +1133,7 @@ select#execFilter:focus-visible{
       <option value="day">Por día</option>
       <option value="week">Por semana</option>
       <option value="month">Por mes</option>
+      <option value="year">Por año</option>
     </select>
 
     <span id="kpiDayWrap" class="kpi-mode-block" hidden style="display:none">
@@ -1159,6 +1160,13 @@ select#execFilter:focus-visible{
         <option value="year_avg">Promedio del año</option>
         <option value="prev_year_total">Total año anterior (mensualizado)</option>
       </select>
+    </span>
+
+    <span id="kpiYearWrap" class="kpi-mode-block" hidden style="display:none">
+      <label for="kpiYear">Año</label>
+      <select id="kpiYear" aria-label="Año a analizar"></select>
+      <label for="kpiYearBase">Comparar con</label>
+      <select id="kpiYearBase" aria-label="Año base de comparación"></select>
     </span>
 
     <span class="kpi-period-tag" id="kpiPeriodTag">—</span>
@@ -1713,7 +1721,9 @@ let currentExec = 'ALL';
 let selectedYear = new Date().getFullYear();
 let kpiMonthYm = null; // null = mes calendario actual
 let kpiBase = 'prev_month';
-let kpiMode = 'month'; // 'day' | 'week' | 'month'
+let kpiMode = 'month'; // 'day' | 'week' | 'month' | 'year'
+let kpiYear = new Date().getFullYear();
+let kpiYearBase = kpiYear - 1;
 let kpiDay = '';       // YYYY-MM-DD periodo a observar
 let kpiDayBase = '';   // YYYY-MM-DD día base de comparación
 let kpiWeek = '';      // YYYY-MM-DD lunes de la semana a observar
@@ -1839,7 +1849,7 @@ function labelMonthShort(ym){
 }
 
 function emptyMetrics(){
-  return {clientes_nuevos:0, clientes_activos:0, operaciones:0, monto_fin:0, dif_precio:0, comisiones:0};
+  return {clientes_nuevos:0, clientes_activos:0, operaciones:0, monto_fin:0, cartera_vigente:0, dif_precio:0, comisiones:0};
 }
 
 /*
@@ -1964,6 +1974,7 @@ function buildData(masterRows, facturaRows, selectedYear){
   const colLegal = schema.gastoLegal;
   const colLegalSinIva = schema.gastoLegalSinIva;
   const colGastoOp = schema.gastoOperacion;
+  const colMontoVigente = schema.montoVigente;
   const colDealer = schema.gastoDealer;
 
   masterRows.forEach(r => {
@@ -2077,25 +2088,30 @@ function buildData(masterRows, facturaRows, selectedYear){
       }
     }
     const comis = colGastoOp ? toNum(r[colGastoOp]) : 0;
+    const carteraVigente = colMontoVigente ? toNum(r[colMontoVigente]) : 0;
 
     cell.operaciones += 1;
     cell.monto_fin += monto;
+    cell.cartera_vigente += carteraVigente;
     cell.dif_precio += dif;
     cell.comisiones += comis;
 
     const acc = summary.ejecutivos[e].accum;
     acc.operaciones += 1;
     acc.monto_fin += monto;
+    acc.cartera_vigente += carteraVigente;
     acc.dif_precio += dif;
     acc.comisiones += comis;
 
     summary.total.months[ym].operaciones += 1;
     summary.total.months[ym].monto_fin += monto;
+    summary.total.months[ym].cartera_vigente += carteraVigente;
     summary.total.months[ym].dif_precio += dif;
     summary.total.months[ym].comisiones += comis;
 
     summary.total.accum.operaciones += 1;
     summary.total.accum.monto_fin += monto;
+    summary.total.accum.cartera_vigente += carteraVigente;
     summary.total.accum.dif_precio += dif;
     summary.total.accum.comisiones += comis;
   });
@@ -2137,6 +2153,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('Se utilizó la columna "' + colInteres + '" como Diferencia de precio (interés).');
     notes.push('Período mensual: se usa (23) Colocado mes; si falta, se usa (47) Fecha creación.');
     notes.push('Monto anticipo: se calcula por operación como (33) Monto a financiar − (10) Abono pyme.');
+    if(colMontoVigente) notes.push('Cartera vigente: se suma directamente desde (55) Monto vigente, respetando el período y ejecutivo seleccionados.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
     notes.push('Clientes activos: Empresa solicitante distinta con (10) Abono pyme = 0; el período se determina exclusivamente con (47) Fecha creación (fecha de la transacción).');
     if(colGastoOp) notes.push('Comisión: se usa (36) Gasto operación (sin IVA) por operación.');
@@ -2671,6 +2688,7 @@ function sumMetrics(list){
     t.clientes_activos += c.clientes_activos || 0;
     t.operaciones += c.operaciones || 0;
     t.monto_fin += c.monto_fin || 0;
+    t.cartera_vigente += c.cartera_vigente || 0;
     t.dif_precio += c.dif_precio || 0;
     t.comisiones += c.comisiones || 0;
   });
@@ -2774,10 +2792,90 @@ function metricsForMonthRaw(ym){
 
     t.operaciones += 1;
     t.monto_fin += masterMontoAnticipo(r, schema);
+    t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
   });
   return t;
+}
+
+/**
+ * Métricas anuales preservando la lógica vigente del dashboard:
+ * - Clientes activos: (10) Abono pyme = 0 y año de (47) Fecha creación.
+ * - Resto de KPI: año del período operativo resuelto por masterPeriodYM().
+ * - Clientes activos y nuevos se cuentan como clientes únicos dentro del año.
+ */
+function metricsForYear(year){
+  const y = Number(year);
+  const t = emptyMetrics();
+  if(!Number.isFinite(y) || !masterRowsCache || !masterRowsCache.length) return t;
+
+  const schema = resolveMasterSchema(masterRowsCache);
+  const firstMap = buildClientFirstOpMap();
+  const seenNew = {};
+  const seenActive = {};
+
+  masterRowsCache.forEach(r => {
+    const e = r[schema.exec] || '';
+    if(currentExec !== 'ALL' && e !== currentExec) return;
+
+    const cli = String(r[schema.cliente] || '').trim();
+
+    // Clientes activos: fecha válida exclusivamente (47) Fecha creación.
+    const activeYm = masterActiveClientYM(r, schema);
+    const activeYear = activeYm ? Number(activeYm.slice(0,4)) : NaN;
+    if(cli && activeYear === y && masterIsActiveClientRow(r, schema) && !seenActive[cli]){
+      seenActive[cli] = true;
+      t.clientes_activos += 1;
+    }
+
+    // Los demás KPI conservan el período operativo usado por el dashboard.
+    const opYm = masterPeriodYM(r, schema);
+    const opYear = opYm ? Number(opYm.slice(0,4)) : NaN;
+    if(opYear !== y) return;
+
+    const declaredNewYm = masterDeclaredNewYM(r, schema);
+    const declaredNewYear = declaredNewYm ? Number(declaredNewYm.slice(0,4)) : NaN;
+    const isNew = declaredNewYm
+      ? (declaredNewYear === y)
+      : isFirstOpOfClient(r, schema.cliente, schema.fechaCreacion, firstMap);
+
+    if(cli && isNew && !seenNew[cli]){
+      seenNew[cli] = true;
+      t.clientes_nuevos += 1;
+    }
+
+    t.operaciones += 1;
+    t.monto_fin += masterMontoAnticipo(r, schema);
+    t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
+    t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
+    t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
+  });
+
+  return t;
+}
+
+function availableKpiYears(){
+  const years = new Set();
+  if(DATA && Array.isArray(DATA.months)){
+    DATA.months.forEach(ym => {
+      const y = Number(String(ym).slice(0,4));
+      if(Number.isFinite(y)) years.add(y);
+    });
+  }
+  if(masterRowsCache && masterRowsCache.length){
+    const schema = resolveMasterSchema(masterRowsCache);
+    masterRowsCache.forEach(r => {
+      [masterPeriodYM(r, schema), masterActiveClientYM(r, schema)].forEach(ym => {
+        const y = ym ? Number(String(ym).slice(0,4)) : NaN;
+        if(Number.isFinite(y)) years.add(y);
+      });
+    });
+  }
+  const current = new Date().getFullYear();
+  years.add(current);
+  years.add(current - 1);
+  return Array.from(years).sort((a,b) => b-a);
 }
 
 /** Métricas entre dos fechas (inclusive) sobre Fecha creación del maestro. */
@@ -2816,6 +2914,7 @@ function metricsForDateRange(fromStr, toStr){
 
     t.operaciones += 1;
     t.monto_fin += masterMontoAnticipo(r, schema);
+    t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
   });
@@ -2858,6 +2957,7 @@ function yearAverageMetrics(year){
       sums.clientes_activos += m.clientes_activos;
       sums.operaciones += m.operaciones;
       sums.monto_fin += m.monto_fin;
+      sums.cartera_vigente += m.cartera_vigente;
       sums.dif_precio += m.dif_precio;
       sums.comisiones += m.comisiones;
       n++;
@@ -2869,6 +2969,7 @@ function yearAverageMetrics(year){
     clientes_activos: sums.clientes_activos / n,
     operaciones: sums.operaciones / n,
     monto_fin: sums.monto_fin / n,
+    cartera_vigente: sums.cartera_vigente / n,
     dif_precio: sums.dif_precio / n,
     comisiones: sums.comisiones / n
   };
@@ -2894,12 +2995,15 @@ function setupKpiControls(){
   const dayWrap = document.getElementById('kpiDayWrap');
   const weekWrap = document.getElementById('kpiWeekWrap');
   const monthWrap = document.getElementById('kpiMonthWrap');
+  const yearWrap = document.getElementById('kpiYearWrap');
   const dayEl = document.getElementById('kpiDay');
   const dayBaseEl = document.getElementById('kpiDayBase');
   const weekEl = document.getElementById('kpiWeek');
   const weekBaseEl = document.getElementById('kpiWeekBase');
   const selMonth = document.getElementById('kpiMonth');
   const selBase = document.getElementById('kpiBase');
+  const selYear = document.getElementById('kpiYear');
+  const selYearBase = document.getElementById('kpiYearBase');
   if(!modeEl || !DATA) return;
 
   const today = new Date();
@@ -2918,6 +3022,7 @@ function setupKpiControls(){
     show(dayWrap, mode === 'day');
     show(weekWrap, mode === 'week');
     show(monthWrap, mode === 'month');
+    show(yearWrap, mode === 'year');
   }
   applyKpiModeUI(kpiMode);
 
@@ -2940,6 +3045,27 @@ function setupKpiControls(){
     selMonth.value = kpiMonthYm;
   }
   if(selBase) selBase.value = kpiBase;
+
+  const yearOptions = availableKpiYears();
+  if(yearOptions.length){
+    if(!yearOptions.includes(Number(kpiYear))) kpiYear = yearOptions[0];
+    if(!yearOptions.includes(Number(kpiYearBase)) || Number(kpiYearBase) === Number(kpiYear)){
+      const preferred = Number(kpiYear) - 1;
+      kpiYearBase = yearOptions.includes(preferred)
+        ? preferred
+        : (yearOptions.find(y => y !== Number(kpiYear)) ?? preferred);
+    }
+    const optsHtml = yearOptions.map(y => `<option value="${y}">${y}</option>`).join('');
+    if(selYear){ selYear.innerHTML = optsHtml; selYear.value = String(kpiYear); }
+    if(selYearBase){
+      // Permitir comparar incluso con el año anterior aunque todavía no tenga filas cargadas.
+      let baseYears = yearOptions.slice();
+      if(!baseYears.includes(Number(kpiYear) - 1)) baseYears.push(Number(kpiYear) - 1);
+      baseYears = Array.from(new Set(baseYears)).sort((a,b) => b-a);
+      selYearBase.innerHTML = baseYears.map(y => `<option value="${y}">${y}</option>`).join('');
+      selYearBase.value = String(kpiYearBase);
+    }
+  }
 
   if(!modeEl._wired){
     modeEl._wired = true;
@@ -2979,6 +3105,17 @@ function setupKpiControls(){
     });
     if(selMonth) selMonth.addEventListener('change', () => { kpiMonthYm = selMonth.value; renderKpis(); updateContextBars(); });
     if(selBase) selBase.addEventListener('change', () => { kpiBase = selBase.value; renderKpis(); updateContextBars(); });
+    if(selYear) selYear.addEventListener('change', () => {
+      kpiYear = Number(selYear.value);
+      if(Number(kpiYearBase) === Number(kpiYear)){
+        kpiYearBase = Number(kpiYear) - 1;
+      }
+      renderKpis(); updateContextBars();
+    });
+    if(selYearBase) selYearBase.addEventListener('change', () => {
+      kpiYearBase = Number(selYearBase.value);
+      renderKpis(); updateContextBars();
+    });
   }
 }
 
@@ -3013,6 +3150,13 @@ function renderKpis(){
     prev = metricsForDateRange(baseMonISO, baseSunISO);
     baseLabel = 'vs ' + fmtISO_es(baseMonISO) + ' → ' + fmtISO_es(baseSunISO);
     tagText = fmtISO_es(monISO) + ' → ' + fmtISO_es(sunISO) + ' · ' + baseLabel;
+  } else if(kpiMode === 'year'){
+    const curYear = Number(kpiYear) || new Date().getFullYear();
+    const baseYear = Number(kpiYearBase) || (curYear - 1);
+    cur = metricsForYear(curYear);
+    prev = metricsForYear(baseYear);
+    baseLabel = 'vs ' + baseYear;
+    tagText = String(curYear) + ' · ' + baseLabel;
   } else {
     // month
     const curYm = kpiMonthYm || DATA.generated_current_month;
@@ -3057,6 +3201,12 @@ function renderKpis(){
       value: fmtCLP(cur.monto_fin),
       delta: pctDelta(cur.monto_fin, prev.monto_fin),
       sub: baseLabel
+    },
+    {
+      tone: '', label: 'Cartera vigente',
+      value: fmtCLP(cur.cartera_vigente || 0),
+      delta: pctDelta(cur.cartera_vigente || 0, prev.cartera_vigente || 0),
+      sub: '(55) Monto vigente · ' + baseLabel
     },
     {
       tone: 'gold', label: 'Diferencia de precio',
