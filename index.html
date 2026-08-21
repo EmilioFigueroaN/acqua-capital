@@ -1289,7 +1289,7 @@ select#execFilter:focus-visible{
 
 <section class="block">
     <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Facturas nuevas</h2></div>
-    <p class="sec-desc">Inventario de facturas por empresa. <b>Disponibles:</b> sin financiera asignada, aptas para cesión. <b>Cedidas:</b> ya asignadas a un banco o fondo. Filtros disponibles: estado, puntaje Warren, búsqueda por nombre y antigüedad (días desde la fecha de la factura).</p>
+    <p class="sec-desc">Inventario de facturas por empresa. <b>Disponibles:</b> sin financiera asignada, aptas para cesión. <b>Cedidas:</b> ya asignadas a un banco o fondo. Filtros disponibles: estado, puntaje Warren, excedente, búsqueda por nombre y antigüedad (días desde la fecha de la factura).</p>
     <div class="sec-filters" id="factFilters">
       <label for="factEstadoFilter">Estado</label>
       <select id="factEstadoFilter">
@@ -1304,6 +1304,13 @@ select#execFilter:focus-visible{
         <option value="medio">Medio (200–399)</option>
         <option value="bajo">Bajo (&lt; 200)</option>
         <option value="sin">Sin dato</option>
+      </select>
+      <label for="factExcedenteFilter">Excedente</label>
+      <select id="factExcedenteFilter">
+        <option value="ALL">Todos</option>
+        <option value="con">Con excedente</option>
+        <option value="sin">Sin excedente</option>
+        <option value="na">Sin dato</option>
       </select>
       <label for="factSearch">Buscar</label>
       <input type="search" id="factSearch" placeholder="Buscar empresa o deudor…" style="font-family:inherit;font-size:13px;padding:6px 10px;border:1.5px solid var(--line);border-radius:8px;min-width:180px;">
@@ -1324,7 +1331,7 @@ select#execFilter:focus-visible{
     </div>
     <div class="ctx-bar" id="ctxFacturas">
       <span class="ctx-pill" id="ctxFacturasPill">—</span>
-      <span class="ctx-text" id="ctxFacturasText">Disponibles: sin financiera. Cedidas: con financiera asignada. Warren: puntaje de calidad (promedio; “Sin registro” se excluye del cálculo).</span>
+      <span class="ctx-text" id="ctxFacturasText">Disponibles: sin financiera. Cedidas: con financiera asignada. Warren: puntaje de calidad (promedio; “Sin registro” se excluye del cálculo). Excedente: filtro basado en la columna (17) Excedentes.</span>
     </div>
     <div class="card">
       <div class="table-scroll">
@@ -2565,13 +2572,14 @@ function renderFacturas(){
     const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
     const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
     const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
+    const fExc = keys.find(k => /^\(17\)\s*Excedentes/i.test(k)) || keys.find(k => /excedentes?/i.test(k)) || 'Excedentes';
     const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
 
     const by = {};
     facturaRowsCache.forEach(r => {
       const e = r[fExec] || '';
       if(currentExec !== 'ALL' && e !== currentExec) return;
-      if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha)) return;
+      if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, fExc, filters, fFecha)) return;
       if(filters.urgencia && filters.urgencia !== 'ALL'){
         const fin0 = (r[fFin] || '').trim();
         const est0 = (fin0 && fin0 !== '-') ? 'Cedida' : 'Disponible';
@@ -2658,6 +2666,10 @@ function renderFacturas(){
       if(filters.estado === 'disp') parts.push('solo disponibles');
       if(filters.estado === 'ced') parts.push('solo cedidas');
       if(filters.warren !== 'ALL') parts.push('Warren ' + filters.warren);
+      if(filters.excedente && filters.excedente !== 'ALL'){
+        const excNames = { con:'con excedente', sin:'sin excedente', na:'sin dato de excedente' };
+        parts.push('excedente: ' + (excNames[filters.excedente] || filters.excedente));
+      }
       if(filters.search) parts.push('búsqueda "' + filters.search + '"');
       if(filters.ageMax > 0) parts.push('antigüedad ≤ ' + filters.ageMax + ' días');
       if(filters.urgencia && filters.urgencia !== 'ALL'){
@@ -3906,6 +3918,7 @@ function renderWarrenSeg(){
   const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
   const fEmp = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
   const fDeudor = keys.find(k => /raz[oó]n\s*social\s*deudor/i.test(k)) || 'Razón social deudor';
+  const fExc = keys.find(k => /^\(17\)\s*Excedentes/i.test(k)) || keys.find(k => /excedentes?/i.test(k)) || 'Excedentes';
   const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
   const filters = getFactSectionFilters();
 
@@ -3923,7 +3936,7 @@ function renderWarrenSeg(){
   facturaRowsCache.forEach(r => {
     const e = r[fExec] || '';
     if(currentExec !== 'ALL' && e !== currentExec) return;
-    if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha)) return;
+    if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, fExc, filters, fFecha)) return;
     const monto = toNum(r[fMonto]);
     const fin = (r[fFin] || '').trim();
     const ced = fin && fin !== '-';
@@ -3957,13 +3970,27 @@ function getFactSectionFilters(){
   return {
     estado: document.getElementById('factEstadoFilter')?.value || 'ALL',
     warren: document.getElementById('factWarrenFilter')?.value || 'ALL',
+    excedente: document.getElementById('factExcedenteFilter')?.value || 'ALL',
     search: (document.getElementById('factSearch')?.value || '').trim().toLowerCase(),
     ageMax: ageMax, // 0 = sin límite
     urgencia: document.getElementById('factUrgFilter')?.value || 'ALL'
   };
 }
 
-function passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha){
+function facturaExcedenteBand(raw){
+  if(raw === undefined || raw === null) return 'na';
+  const s = String(raw).trim();
+  if(!s || s === '-' || /^n\/?a$/i.test(s)) return 'na';
+  if(/\d/.test(s)){
+    const n = toNum(s);
+    return Math.abs(n) > 0 ? 'con' : 'sin';
+  }
+  if(/^(si|sí|yes|true|con|x)$/i.test(s)) return 'con';
+  if(/^(no|false|sin|ninguno|none|sin excedente|normal)$/i.test(s)) return 'sin';
+  return 'na';
+}
+
+function passFactFilters(r, fEmp, fDeudor, fFin, fWar, fExc, filters, fFecha){
   const fin = (r[fFin] || '').trim();
   const isCed = fin && fin !== '-';
   if(filters.estado === 'disp' && isCed) return false;
@@ -3976,6 +4003,8 @@ function passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha){
   }
   const band = warrenBand(w);
   if(filters.warren !== 'ALL' && band !== filters.warren) return false;
+  const excBand = facturaExcedenteBand(fExc ? r[fExc] : null);
+  if(filters.excedente !== 'ALL' && excBand !== filters.excedente) return false;
   if(filters.search){
     const blob = ((r[fEmp]||'') + ' ' + (r[fDeudor]||'')).toLowerCase();
     if(!blob.includes(filters.search)) return false;
@@ -4027,12 +4056,13 @@ function renderFacturasDetalle(){
   const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
   const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
   const fWar = keys.find(k => /warren\s*2/i.test(k)) || 'Warren 2';
+  const fExc = keys.find(k => /^\(17\)\s*Excedentes/i.test(k)) || keys.find(k => /excedentes?/i.test(k)) || 'Excedentes';
   const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
 
   const filters = getFactSectionFilters();
   let rows = facturaRowsCache.filter(r => {
     if(currentExec !== 'ALL' && (r[fExec] || '') !== currentExec) return false;
-    return passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha);
+    return passFactFilters(r, fEmp, fDeudor, fFin, fWar, fExc, filters, fFecha);
   });
 
   // Filtro por color de urgencia
@@ -5071,7 +5101,7 @@ if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', down
 function refreshFacturasSection(){
   if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); renderCesion(); }
 }
-['factEstadoFilter','factWarrenFilter','factUrgFilter'].forEach(id => {
+['factEstadoFilter','factWarrenFilter','factExcedenteFilter','factUrgFilter'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', refreshFacturasSection);
 });
