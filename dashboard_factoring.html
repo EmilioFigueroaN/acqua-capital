@@ -3934,12 +3934,14 @@ function renderExcedenteRetenido(){
 
   const keys = Object.keys(rows[0] || {});
   const colEmpresa = keys.find(k => /^\(26\)\s*Empresa\s*solicitante/i.test(k)) || keys.find(k => /Empresa\s*solicitante/i.test(k));
+  const colFolio = keys.find(k => /^\(3\)\s*Folio/i.test(k)) || keys.find(k => /^Folio$/i.test(k)) || keys.find(k => /Folio/i.test(k));
   const colEstado = keys.find(k => /^\(17\)\s*Excedentes/i.test(k)) || keys.find(k => /Excedentes/i.test(k));
   const colMonto = keys.find(k => /^\(32\)\s*Monto\s*retenido\s*\(garant[ií]a\)/i.test(k)) || keys.find(k => /Monto\s*retenido.*garant/i.test(k));
 
-  if(!colEmpresa || !colEstado || !colMonto){
+  if(!colEmpresa || !colFolio || !colEstado || !colMonto){
     const faltan = [
       !colEmpresa ? '(26) Empresa solicitante' : '',
+      !colFolio ? '(3) Folio' : '',
       !colEstado ? '(17) Excedentes' : '',
       !colMonto ? '(32) Monto retenido (garantía)' : ''
     ].filter(Boolean).join(', ');
@@ -3950,26 +3952,33 @@ function renderExcedenteRetenido(){
   const filtro = document.getElementById('factExcedenteFilter')?.value || 'ALL';
   const estadosValidos = new Set(['Disponible','No generado','Entregado']);
 
-  // Agrupa por empresa + estado para evitar repetir una misma empresa varias
-  // veces cuando tiene múltiples operaciones con el mismo estado.
-  const byEmpresaEstado = new Map();
+  // Mostrar cada fila del maestro por separado: no se agrupa por empresa ni por estado.
+  const detalle = [];
 
-  rows.forEach(r => {
+  rows.forEach((r, idx) => {
     const empresa = String(r[colEmpresa] || '').trim() || 'Sin empresa';
     const estado = String(r[colEstado] || '').trim();
     if(!estadosValidos.has(estado)) return;
     if(filtro !== 'ALL' && estado !== filtro) return;
 
-    const key = empresa + '\u0000' + estado;
-    if(!byEmpresaEstado.has(key)){
-      byEmpresaEstado.set(key, { empresa, estado, monto:0 });
-    }
-    byEmpresaEstado.get(key).monto += parseMasterCLP(r[colMonto]);
+    detalle.push({
+      empresa,
+      folio: String(r[colFolio] || '').trim(),
+      estado,
+      monto: parseMasterCLP(r[colMonto]),
+      orden: idx
+    });
   });
 
-  const detalle = Array.from(byEmpresaEstado.values()).sort((a,b) => {
+  // Orden legible, pero sin consolidar registros.
+  detalle.sort((a,b) => {
     const c = a.empresa.localeCompare(b.empresa, 'es', { sensitivity:'base' });
-    return c !== 0 ? c : a.estado.localeCompare(b.estado, 'es', { sensitivity:'base' });
+    if(c !== 0) return c;
+    const f = a.folio.localeCompare(b.folio, 'es', { numeric:true, sensitivity:'base' });
+    if(f !== 0) return f;
+    const e = a.estado.localeCompare(b.estado, 'es', { sensitivity:'base' });
+    if(e !== 0) return e;
+    return a.orden - b.orden;
   });
 
   let totalMonto = 0;
@@ -3979,16 +3988,18 @@ function renderExcedenteRetenido(){
     totalMonto += x.monto;
     body += `<tr>
       <td class="left">${escapeHtml(x.empresa)}</td>
+      <td>${escapeHtml(x.folio || '—')}</td>
       <td class="left" style="font-weight:400">${escapeHtml(x.estado)}</td>
       <td>${fmtCLP(x.monto)}</td>
     </tr>`;
   });
 
   if(!body){
-    body = '<tr><td colspan="3" style="text-align:center;color:#6b7a8c">Sin empresas para el estado seleccionado.</td></tr>';
+    body = '<tr><td colspan="4" style="text-align:center;color:#6b7a8c">Sin empresas para el estado seleccionado.</td></tr>';
   } else {
     body += `<tr class="total-row">
       <td class="left">Total</td>
+      <td></td>
       <td></td>
       <td>${fmtCLP(totalMonto)}</td>
     </tr>`;
@@ -3996,6 +4007,7 @@ function renderExcedenteRetenido(){
 
   table.innerHTML = `<thead><tr>
     <th class="left">Empresa</th>
+    <th>Folio</th>
     <th class="left">Estado excedente</th>
     <th>Monto retenido (garantía)</th>
   </tr></thead><tbody>${body}</tbody>`;
