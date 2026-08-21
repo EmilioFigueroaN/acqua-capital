@@ -1337,9 +1337,24 @@ select#execFilter:focus-visible{
     <div class="notes" id="notesFacturas"></div>
 
     <div class="card" style="margin-top:18px;">
-      <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Segmentación Warren × cesión</h3>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Matriz de calidad versus estado de cesión. <b>Alto:</b> Warren ≥ 400 · <b>Medio:</b> 200–399 · <b>Bajo:</b> &lt; 200 o sin dato. Permite priorizar qué stock ceder y dónde hay mayor riesgo.</p>
-      <div class="seg-matrix" id="warrenSegMatrix"></div>
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 18px;margin-bottom:12px;">
+        <div>
+          <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Excedentes · Monto retenido</h3>
+          <p style="font-size:12px;color:var(--ink-soft);margin:0;">Resumen según <b>(17) Excedentes</b>. El monto corresponde exclusivamente a <b>(32) Monto retenido (garantía)</b>.</p>
+        </div>
+        <div style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label for="factExcedenteFilter" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Estado excedente</label>
+          <select id="factExcedenteFilter" style="font-family:'Inter',sans-serif;font-size:13.5px;font-weight:600;padding:7px 32px 7px 11px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer;">
+            <option value="ALL">Todos</option>
+            <option value="Disponible">Disponible</option>
+            <option value="No generado">No generado</option>
+            <option value="Entregado">Entregado</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table id="tbl-excedente-retenido"></table>
+      </div>
     </div>
 
     <div class="card" style="margin-top:18px;">
@@ -3890,63 +3905,95 @@ function warrenBand(w){
   return 'bajo';
 }
 
-function renderWarrenSeg(){
-  const el = document.getElementById('warrenSegMatrix');
-  if(!el) return;
-  if(!facturaRowsCache || !facturaRowsCache.length){
-    el.innerHTML = '<p class="insight-empty">Sin datos.</p>';
+function parseMasterCLP(v){
+  if(typeof v === 'number') return isFinite(v) ? v : 0;
+  if(v === null || v === undefined) return 0;
+  let s = String(v).trim().replace(/\s+/g,'').replace(/\$/g,'');
+  if(!s || s === '-') return 0;
+  // Formato chileno típico del maestro: 1.234.567 o 1.234.567,89
+  if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)){
+    s = s.replace(/\./g,'').replace(',','.');
+  } else if(/^-?\d+(,\d+)$/.test(s)){
+    s = s.replace(',','.');
+  } else {
+    s = s.replace(/[^\d.\-]/g,'');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function renderExcedenteRetenido(){
+  const table = document.getElementById('tbl-excedente-retenido');
+  if(!table) return;
+
+  const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
+  if(!rows.length){
+    table.innerHTML = '<tbody><tr><td class="left" style="font-weight:400;color:#6b7a8c">Sin datos del maestro para el filtro actual.</td></tr></tbody>';
     return;
   }
 
-  const sample = facturaRowsCache[0] || {};
-  const keys = Object.keys(sample);
-  const fExec = keys.find(k => /^ejecutivo$/i.test(k)) || 'Ejecutivo';
-  const fMonto = keys.find(k => /monto\s*total/i.test(k)) || 'Monto total';
-  const fFin = keys.find(k => /financiera/i.test(k)) || 'Nombre financiera';
-  const fWar = keys.find(k => /warren\s*2/i.test(k)) || keys.find(k => /warren/i.test(k)) || 'Warren 2';
-  const fEmp = keys.find(k => /raz[oó]n\s*social\s*empresa/i.test(k)) || 'Razón social empresa';
-  const fDeudor = keys.find(k => /raz[oó]n\s*social\s*deudor/i.test(k)) || 'Razón social deudor';
-  const fFecha = keys.find(k => /^fecha$/i.test(k)) || 'Fecha';
-  const filters = getFactSectionFilters();
+  const keys = Object.keys(rows[0] || {});
+  const colEstado = keys.find(k => /^\(17\)\s*Excedentes/i.test(k)) || keys.find(k => /Excedentes/i.test(k));
+  const colMonto = keys.find(k => /^\(32\)\s*Monto\s*retenido\s*\(garant[ií]a\)/i.test(k)) || keys.find(k => /Monto\s*retenido.*garant/i.test(k));
 
-  const cells = {
-    'alto|disp': {label:'Warren alto · Disponible', monto:0, n:0},
-    'alto|ced': {label:'Warren alto · Cedida', monto:0, n:0},
-    'medio|disp': {label:'Warren medio · Disponible', monto:0, n:0},
-    'medio|ced': {label:'Warren medio · Cedida', monto:0, n:0},
-    'bajo|disp': {label:'Warren bajo · Disponible', monto:0, n:0},
-    'bajo|ced': {label:'Warren bajo · Cedida', monto:0, n:0},
-    'sin|disp': {label:'Sin Warren · Disponible', monto:0, n:0},
-    'sin|ced': {label:'Sin Warren · Cedida', monto:0, n:0},
+  if(!colEstado || !colMonto){
+    const faltan = [!colEstado ? '(17) Excedentes' : '', !colMonto ? '(32) Monto retenido (garantía)' : ''].filter(Boolean).join(' y ');
+    table.innerHTML = `<tbody><tr><td class="left" style="font-weight:400;color:#c04545">No se encontró ${faltan} en el maestro.</td></tr></tbody>`;
+    return;
+  }
+
+  const filtro = document.getElementById('factExcedenteFilter')?.value || 'ALL';
+  const estados = ['Disponible','No generado','Entregado'];
+  const agg = {
+    'Disponible': { ops:0, monto:0 },
+    'No generado': { ops:0, monto:0 },
+    'Entregado': { ops:0, monto:0 }
   };
 
-  facturaRowsCache.forEach(r => {
-    const e = r[fExec] || '';
-    if(currentExec !== 'ALL' && e !== currentExec) return;
-    if(!passFactFilters(r, fEmp, fDeudor, fFin, fWar, filters, fFecha)) return;
-    const monto = toNum(r[fMonto]);
-    const fin = (r[fFin] || '').trim();
-    const ced = fin && fin !== '-';
-    let wRaw = r[fWar];
-    let w = null;
-    if(wRaw !== undefined && wRaw !== null && String(wRaw).trim() !== '' && !/^sin/i.test(String(wRaw))){
-      const n = parseFloat(String(wRaw).replace(/[^\d.\-]/g,''));
-      if(!isNaN(n)) w = n;
-    }
-    const band = warrenBand(w);
-    const key = band + '|' + (ced ? 'ced' : 'disp');
-    if(cells[key]){ cells[key].monto += monto; cells[key].n += 1; }
+  rows.forEach(r => {
+    const estado = String(r[colEstado] || '').trim();
+    if(!agg[estado]) return;
+    agg[estado].ops += 1;
+    agg[estado].monto += parseMasterCLP(r[colMonto]);
   });
 
-  const order = ['alto|disp','alto|ced','medio|disp','medio|ced','bajo|disp','bajo|ced','sin|disp','sin|ced'];
-  el.innerHTML = order.map(k => {
-    const c = cells[k];
-    return `<div class="seg-cell">
-      <div class="sc-label">${c.label}</div>
-      <div class="sc-value">${fmtCLP(c.monto)}</div>
-      <div class="sc-meta">${c.n} factura(s)</div>
-    </div>`;
-  }).join('');
+  const totalGlobal = estados.reduce((s,e) => s + agg[e].monto, 0);
+  const visibles = filtro === 'ALL' ? estados : estados.filter(e => e === filtro);
+  let body = '';
+  let totalOps = 0;
+  let totalMonto = 0;
+
+  visibles.forEach(estado => {
+    const x = agg[estado];
+    const pct = totalGlobal > 0 ? x.monto / totalGlobal * 100 : 0;
+    totalOps += x.ops;
+    totalMonto += x.monto;
+    body += `<tr>
+      <td class="left">${estado}</td>
+      <td>${fmtInt(x.ops)}</td>
+      <td>${fmtCLP(x.monto)}</td>
+      <td>${pct.toFixed(1).replace('.',',')}%</td>
+    </tr>`;
+  });
+
+  if(!body){
+    body = '<tr><td colspan="4" style="text-align:center;color:#6b7a8c">Sin registros para el estado seleccionado.</td></tr>';
+  } else {
+    const pctTotal = totalGlobal > 0 ? totalMonto / totalGlobal * 100 : 0;
+    body += `<tr class="total-row">
+      <td class="left">Total${filtro === 'ALL' ? '' : ' filtrado'}</td>
+      <td>${fmtInt(totalOps)}</td>
+      <td>${fmtCLP(totalMonto)}</td>
+      <td>${pctTotal.toFixed(1).replace('.',',')}%</td>
+    </tr>`;
+  }
+
+  table.innerHTML = `<thead><tr>
+    <th class="left">Estado excedente</th>
+    <th>Operaciones</th>
+    <th>Monto retenido (garantía)</th>
+    <th>% del total</th>
+  </tr></thead><tbody>${body}</tbody>`;
 }
 
 
@@ -4796,7 +4843,7 @@ function renderAll(){
   renderMesCurso();
   renderFacturas();
   renderDeudorConcentration();
-  renderWarrenSeg();
+  renderExcedenteRetenido();
   renderFacturasDetalle();
   addTableScrollHints();
 }
@@ -5069,12 +5116,16 @@ if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', down
 
 
 function refreshFacturasSection(){
-  if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderWarrenSeg(); renderCesion(); }
+  if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderExcedenteRetenido(); renderCesion(); }
 }
 ['factEstadoFilter','factWarrenFilter','factUrgFilter'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', refreshFacturasSection);
 });
+const factExcedenteFilter = document.getElementById('factExcedenteFilter');
+if(factExcedenteFilter){
+  factExcedenteFilter.addEventListener('change', () => { if(DATA) renderExcedenteRetenido(); });
+}
 const factSearch = document.getElementById('factSearch');
 if(factSearch){
   let t;
