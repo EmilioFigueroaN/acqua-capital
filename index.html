@@ -2053,7 +2053,7 @@ function masterDeclaredNewYM(row, schema){
  * que corresponde a la fecha de la transacción. No se usa (23) Colocado mes.
  */
 function masterActiveClientYM(row, schema){
-  if(!row || !schema || !schema.fechaCreacion) return null;
+  if(!row || !schema || !schema.fechaCreacion) return !null;
   return parseYM(row[schema.fechaCreacion]);
 }
 
