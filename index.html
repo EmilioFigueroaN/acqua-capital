@@ -1995,7 +1995,7 @@ function emptyMetrics(){
 /*
  * Adaptador del maestro de factoring.
  * La versión nueva trae explícitamente:
- *   (10) Abono pyme         -> cliente activo cuando el valor es exactamente 0
+ *   (10) Abono pyme         -> cliente activo cuando el valor es distinto de 0
  *   (23) Colocado mes       -> YYYY-MM del período de la operación
  *   (24) Cliente nuevo      -> YYYY-MM del alta del cliente
  *   (33) Monto a financiar  -> base del Monto anticipo
@@ -2065,8 +2065,8 @@ function masterActiveClientYM(row, schema){
 }
 
 /**
- * Una fila califica como cliente activo solo cuando (10) Abono pyme = 0.
- * Vacíos, "-" y textos no numéricos no se interpretan como cero.
+ * Una fila califica como cliente activo solo cuando (10) Abono pyme es distinto de 0.
+ * Vacíos, "-" y textos no numéricos no se consideran clientes activos.
  */
 function masterIsActiveClientRow(row, schema){
   if(!row || !schema || !schema.abonoPyme) return false;
@@ -2074,7 +2074,7 @@ function masterIsActiveClientRow(row, schema){
   if(raw === null || raw === undefined) return false;
   const s = String(raw).trim();
   if(!s || s === '-' || !/\d/.test(s)) return false;
-  return toNum(raw) === 0;
+  return toNum(raw) !== 0;
 }
 
 /**
@@ -2271,7 +2271,7 @@ function buildData(masterRows, facturaRows, selectedYear){
   });
 
   // CLIENTES ACTIVOS: cálculo independiente del período operativo del resto de KPIs.
-  // Regla de negocio: (10) Abono pyme = 0 y período según (47) Fecha creación.
+  // Regla de negocio: (10) Abono pyme distinto de 0 y período según (47) Fecha creación.
   // Se cuenta cada Empresa solicitante una sola vez por mes; si se visualiza el total,
   // un mismo cliente no se duplica aunque aparezca asociado a más de un ejecutivo.
   masterRows.forEach(r => {
@@ -2309,7 +2309,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('Monto anticipo: se calcula por operación como (33) Monto a financiar − (10) Abono pyme.');
     if(colMontoVigente) notes.push('Cartera vigente: se suma directamente desde (55) Monto vigente, respetando el período y ejecutivo seleccionados.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
-    notes.push('Clientes activos: Empresa solicitante distinta con (10) Abono pyme = 0; el período se determina exclusivamente con (47) Fecha creación (fecha de la transacción).');
+    notes.push('Clientes activos: Empresa solicitante distinta con (10) Abono pyme distinto de 0; el período se determina exclusivamente con (47) Fecha creación (fecha de la transacción).');
     if(colGastoOp) notes.push('Comisión: se usa (36) Gasto operación (sin IVA) por operación.');
     if(colTasaInteresMensual && schema.montoAFinanciar) notes.push('Tasa promedio ponderada: Σ[(40) Tasa interés mensual × (33) Monto a financiar] ÷ Σ[(33) Monto a financiar].');
   } else {
@@ -2494,7 +2494,7 @@ function renderResumen(){
 function renderMesCurso(){
   const m = DATA.generated_current_month;
   document.getElementById('mesCursoDesc').innerHTML =
-    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo: clientes activos (empresas distintas con (10) Abono pyme = 0, fechadas por (47) Fecha creación), clientes nuevos, operaciones, monto anticipado y diferencia de precio, contra la meta del mes de cada ejecutivo.';
+    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo: clientes activos (empresas distintas con (10) Abono pyme distinto de 0, fechadas por (47) Fecha creación), clientes nuevos, operaciones, monto anticipado y diferencia de precio, contra la meta del mes de cada ejecutivo.';
 
   const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
   const rows = execs.map(e => {
@@ -2968,7 +2968,7 @@ function metricsForMonthRaw(ym){
 
 /**
  * Métricas anuales preservando la lógica vigente del dashboard:
- * - Clientes activos: (10) Abono pyme = 0 y año de (47) Fecha creación.
+ * - Clientes activos: (10) Abono pyme distinto de 0 y año de (47) Fecha creación.
  * - Resto de KPI: año del período operativo resuelto por masterPeriodYM().
  * - Clientes activos y nuevos se cuentan como clientes únicos dentro del año.
  */
@@ -3079,7 +3079,7 @@ function metricsForDateRange(fromStr, toStr){
       t.clientes_nuevos += 1;
     }
     // El rango ya está filtrado por (47) Fecha creación; para cliente activo
-    // además se exige estrictamente (10) Abono pyme = 0.
+    // además se exige estrictamente (10) Abono pyme distinto de 0.
     if(cli && masterIsActiveClientRow(r, schema) && !seenActive[cli]){
       seenActive[cli] = true;
       t.clientes_activos += 1;
