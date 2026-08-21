@@ -1897,6 +1897,7 @@ function resolveMasterSchema(rows){
     montoGiro: findMasterHeader(keys, [/^\(46\).*Monto\s*a\s*giro/i, /Monto\s*a\s*giro/i], null),
     montoBruto: findMasterHeader(keys, [/^\(12\).*Monto\s*facturas/i, /Monto\s*facturas/i], null),
     montoVigente: findMasterHeader(keys, [/^\(55\).*Monto\s*vigente/i, /Monto\s*vigente/i], null),
+    interesMora: findMasterHeader(keys, [/^\(68\).*Inter[eé]s\s*Mora/i, /Inter[eé]s\s*Mora/i], null),
     gastoLegalSinIva: findMasterHeader(keys, [/^\(60\).*Gasto\s*legal.*sin\s*iva/i, /Gasto\s*legal.*sin\s*iva/i], null),
     gastoLegal: findMasterHeader(keys, [/^\(34\).*Gasto\s*legal/i, /Gasto\s*legal.*Comisi/i], null),
     gastoOperacion: findMasterHeader(keys, [/^\(36\).*Gasto\s*operaci[oó]n/i, /Gasto\s*operaci[oó]n\s*\(sin/i], null),
@@ -3585,7 +3586,9 @@ function renderMora(){
     let dias = parseInt(String(r[colDias] || '').replace(/[^\d\-]/g,''), 10);
     if(isNaN(dias)) return;
 
-    const monto = masterMontoAnticipo(r, masterSchema);
+    // En aging, la columna de Monto debe venir de (68) Interés Mora.
+    // Si no existe la columna, se usa 0 para evitar mezclar con otros montos.
+    const monto = masterSchema.interesMora ? toNum(r[masterSchema.interesMora]) : 0;
 
     let b;
     if(dias <= 0) b = buckets.vigente;
