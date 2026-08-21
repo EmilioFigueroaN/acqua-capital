@@ -1104,7 +1104,8 @@ select#execFilter:focus-visible{
   }
   .task-item.done{ opacity:0.72; background:var(--paper-2); }
   .task-item.done .task-title{ text-decoration:line-through; color:var(--ink-soft); }
-  .task-item input[type="checkbox"]{ width:18px; height:18px; margin-top:2px; cursor:pointer; accent-color:var(--teal-deep); }
+  .task-item input[type="checkbox"]{ width:18px; height:18px; margin-top:2px; cursor:not-allowed; accent-color:var(--teal-deep); }
+  .task-item input[type="checkbox"]:disabled{ opacity:.75; }
   .task-title{
     font-size:14px; font-weight:600; color:var(--ink); border:none; background:transparent;
     width:100%; padding:0; font-family:inherit;
@@ -5136,7 +5137,7 @@ function applyRoleToTasksUI(){
     if(btnExp) btnExp.style.display = '';
     if(desc){
       const quien = SESSION.ejecutivoKey || SESSION.nombre;
-      desc.textContent = 'Tareas asignadas a ' + quien + '. Puede marcar su cumplimiento. La creación y asignación corresponde a gerencia.';
+      desc.textContent = 'Tareas asignadas a ' + quien + '. Esta vista es de solo lectura; para agregar, editar o marcar tareas como hechas se utiliza la hoja de tareas en Google Sheets.';
     }
   } else {
     // Gerencia (o sin sesión): puede gestionar todo
@@ -5187,18 +5188,21 @@ function setTaskStatus(id, estado){
   saveStatusOverrides(map);
 }
 
-/** Lee siempre tareas.csv del servidor/carpeta del dashboard. */
+/** Lee la hoja de tareas desde Google Sheets. */
 async function loadTasksFromCSVFile(){
   try{
     const res = await fetch(csvUrl(CSV_TAREAS), { cache: 'no-store' });
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     const parsed = parseTasksCSV(text);
-    TASKS = applyStatusOverrides(parsed);
+    // Google Sheets es la única fuente de verdad para estado, prioridad y contenido.
+    // No se aplican overrides locales porque esta vista es de solo lectura.
+    TASKS = parsed;
     return true;
   }catch(e){
-    console.warn('No se pudo leer tareas.csv', e);
-    TASKS = applyStatusOverrides(TASKS || []);
+    console.warn('No se pudo leer la hoja de tareas', e);
+    // Conserva la última lectura visible si falla temporalmente la conexión.
+    TASKS = TASKS || [];
     return false;
   }
 }
@@ -5271,476 +5275,15 @@ function initCollapsibleSections(){
 }
 
 function wireTasksUI(){
-  // Cargar desde archivo al inicio
+  // Vista de solo lectura: carga desde Google Sheets y permite únicamente filtrar.
   loadTasksFromCSVFile().then(() => applyRoleToTasksUI()).catch(() => applyRoleToTasksUI());
 
-  const add = document.getElementById('btnTaskAdd');
-  if(add) add.addEventListener('click', addTaskFromForm);
-  const textEl = document.getElementById('taskNewText');
-  if(textEl) textEl.addEventListener('keydown', e => { if(e.key === 'Enter') addTaskFromForm(); });
-  const list = document.getElementById('taskList');
-  if(list){
-    list.addEventListener('click', onTaskListClick);
-    list.addEventListener('change', onTaskListChange);
-  }
   ['taskFilterExec','taskFilterEstado','taskFilterPrio'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener('change', renderTasks);
   });
-  const exp = document.getElementById('btnTaskExport');
-  if(exp) exp.addEventListener('click', exportTasksCSV);
-  const imp = document.getElementById('btnTaskImport');
-  const file = document.getElementById('taskImportFile');
-  if(imp && file){
-    imp.addEventListener('click', () => file.click());
-    file.addEventListener('change', () => {
-      if(file.files && file.files[0]) importTasksFromFile(file.files[0]);
-      file.value = '';
-    });
-  }
-  const clr = document.getElementById('btnTaskClearDone');
-  if(clr) clr.addEventListener('click', clearDoneTasks);
-
-  let btnReload = document.getElementById('btnTaskReloadCsv');
-  if(!btnReload){
-    const row = document.querySelector('#secTareas .chart-download-row');
-    if(row){
-      btnReload = document.createElement('button');
-      btnReload.type = 'button';
-      btnReload.id = 'btnTaskReloadCsv';
-      btnReload.className = 'btn-refresh';
-      btnReload.title = 'Volver a leer tareas.csv';
-      btnReload.textContent = '↻ Recargar tareas (Sheets)';
-      row.insertBefore(btnReload, row.firstChild);
-    }
-  }
-  if(btnReload){
-    btnReload.addEventListener('click', async () => {
-      const ok = await loadTasksFromCSVFile();
-      applyRoleToTasksUI();
-      alert(ok
-        ? ('Tareas leídas desde Google Sheets: ' + TASKS.length)
-        : 'No se pudo leer la hoja de tareas en Google Sheets. Revisa que esté compartida como “Cualquier persona con el enlace”.');
-    });
-  }
 }
 
-
-function renderAll(){
-  if(!DATA) return;
-  fillTaskExecSelect();
-  fillTaskExecFilter();
-  renderKpis();
-  updateContextBars();
-  renderIntel();
-  renderMora();
-  renderCesion();
-  renderResumen();
-  renderMesCurso();
-  renderFacturas();
-  renderDeudorConcentration();
-  renderExcedenteRetenido();
-  renderFacturasDetalle();
-  renderCarteraVendida();
-  addTableScrollHints();
-}
-
-/* Marca con una pista visual ("← desliza →") las tablas que se desbordan
-   horizontalmente en pantallas angostas, para que no parezca que la tabla
-   está cortada o rota — solo muestran la primera columna sin este aviso. */
-function addTableScrollHints(){
-  document.querySelectorAll('table').forEach(table => {
-    const scrollParent = table.closest('.tbl-scroll, .mora-table-wrap, .fin-table-wrap, .detail-scroll, .card') || table.parentElement;
-    const directParent = table.parentElement;
-    if(!scrollParent || !directParent) return;
-    const overflows = table.scrollWidth > scrollParent.clientWidth + 4;
-    let hint = directParent.querySelector(':scope > .scroll-hint');
-    if(overflows && window.innerWidth <= 760){
-      if(!hint){
-        hint = document.createElement('div');
-        hint.className = 'scroll-hint';
-        hint.textContent = '← desliza para ver más columnas →';
-        directParent.insertBefore(hint, table);
-      }
-      scrollParent.classList.add('has-scroll');
-    } else if(hint){
-      hint.remove();
-      scrollParent.classList.remove('has-scroll');
-    }
-  });
-}
-window.addEventListener('resize', () => { if(DATA) addTableScrollHints(); });
-
-/* ===================== 4. CARGAR CSV → ACTUALIZAR ===================== */
-async function loadFromCSV(){
-  const btn = document.getElementById('btnRefresh');
-  if(btn) btn.disabled = true;
-  setStatus('Leyendo CSV…', '');
-
-  // Aborta la petición si el servidor no responde en un tiempo razonable,
-  // en vez de dejar el dashboard cargando indefinidamente.
-  const NETWORK_TIMEOUT_MS = 15000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
-
-  try{
-    // cache-bust para forzar lectura fresca al actualizar
-    const [r1, r2] = await Promise.all([
-      fetch(csvUrl(CSV_MASTER), { signal: controller.signal, cache: 'no-store' }),
-      fetch(csvUrl(CSV_FACTURAS), { signal: controller.signal, cache: 'no-store' })
-    ]);
-    if(!r1.ok) throw new Error('No se pudo leer ' + CSV_MASTER + ' (HTTP ' + r1.status + '). Revisa el enlace de Google Sheets (compartido con cualquiera que tenga el link).');
-    if(!r2.ok) throw new Error('No se pudo leer ' + CSV_FACTURAS + ' (HTTP ' + r2.status + '). Revisa el enlace de Google Sheets (compartido con cualquiera que tenga el link).');
-
-    const [t1, t2] = await Promise.all([r1.text(), r2.text()]);
-    const masterRows  = parseCSV(t1);
-    const facturaRows = parseCSV(t2);
-
-    if(masterRows.length === 0 && facturaRows.length === 0){
-      throw new Error('Los CSV se leyeron pero no tienen filas de datos.');
-    }
-
-    masterRowsCache = masterRows;
-    facturaRowsCache = facturaRows;
-
-    // Cartera vendida: fuente exclusiva de gerencia.
-    // Las sesiones de ejecutivo no solicitan ni retienen esta información.
-    carteraVendidaLoadError = '';
-    if(isGerente()){
-      try{
-        const cvResult = await fetchCarteraVendidaText(controller.signal);
-        const tcv = cvResult.text;
-        const parsedCv = parseCSV(tcv);
-        if(parsedCv.length){
-          carteraVendidaRowsCache = parsedCv;
-          csvFingerprints.carteraVendida = simpleHash(tcv);
-          carteraVendidaLoadError = '';
-        }
-      } catch(e){
-        carteraVendidaLoadError = e && e.message ? e.message : String(e);
-        console.warn('No se pudo leer cartera vendida; se usa respaldo:', e);
-      }
-    } else {
-      carteraVendidaRowsCache = [];
-    }
-
-    // Metas: opcional. Si el sheet de metas falla o está vacío, el
-    // dashboard sigue funcionando normalmente, solo sin pintar metas.
-    try{
-      const r3 = await fetch(csvUrl(CSV_METAS), { signal: controller.signal, cache: 'no-store' });
-      if(r3.ok){
-        const t3 = await r3.text();
-        metasRowsCache = parseCSV(t3);
-        METAS_BY_MONTH = buildMetas(metasRowsCache);
-        csvFingerprints.metas = simpleHash(t3);
-      }
-    } catch(e){ console.warn('No se pudieron leer las metas:', e); }
-
-    DATA = buildData(masterRows, facturaRows, selectedYear);
-    document.getElementById('yearLabel').textContent = String(selectedYear);
-    renderHeroMeta();
-    setupFilter();
-    renderAll(); // ← actualiza las 3 tablas + gráficos
-
-    // Actualiza huellas para el auto-refresh
-    try{
-      csvFingerprints.master = simpleHash(t1);
-      csvFingerprints.facturas = simpleHash(t2);
-      csvFingerprints._initialized = true;
-    }catch(e){}
-
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2,'0');
-    const mm = String(now.getMinutes()).padStart(2,'0');
-    setStatus('Actualizado ' + hh + ':' + mm + ' · ' + DATA.n_rows_master + ' ops · ' + DATA.n_rows_facturas + ' facturas' + (isGerente() ? ' · ' + (carteraVendidaRowsCache?.length || 0) + ' cartera vendida' : ''), 'ok');
-  } catch(err){
-    const isTimeout = err.name === 'AbortError';
-    const message = isTimeout
-      ? 'Tiempo de espera agotado al leer los CSV (' + (NETWORK_TIMEOUT_MS/1000) + 's). Intenta nuevamente.'
-      : (err.message || String(err));
-    console.error(err);
-    setStatus(message, 'err');
-    // Si ya había datos cargados, se conservan en pantalla y solo se
-    // informa el error en el estado; solo se reemplaza heroMeta si esta
-    // es la carga inicial (no hay datos previos que preservar).
-    if(!DATA){
-      document.getElementById('heroMeta').innerHTML =
-        '<span style="color:#f5c6c0;">⚠ ' + escapeHtml(message) + '</span>';
-    }
-  } finally {
-    clearTimeout(timeoutId);
-    if(btn) btn.disabled = false;
-  }
-}
-
-
-function rebuildFromCache(){
-  if(!masterRowsCache.length && !facturaRowsCache.length) return;
-  DATA = buildData(masterRowsCache, facturaRowsCache, selectedYear);
-  const yl = document.getElementById('yearLabel');
-  if(yl) yl.textContent = String(selectedYear);
-  renderHeroMeta();
-  setupFilter();
-  renderAll();
-}
-
-
-/* ---- Auto-actualización cuando cambian los CSV ---- */
-const AUTO_REFRESH_MS = 30000; // cada 30 s
-let csvFingerprints = { master: '', facturas: '', tareas: '', users: '', metas: '', carteraVendida: '' };
-let autoRefreshTimer = null;
-let autoRefreshBusy = false;
-
-function simpleHash(str){
-  // hash rápido no criptográfico para detectar cambios de contenido
-  let h = 2166136261;
-  const s = String(str || '');
-  for(let i = 0; i < s.length; i++){
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(36) + ':' + s.length;
-}
-
-async function fetchTextNoCache(url){
-  const res = await fetch(csvUrl(url), { cache: 'no-store' });
-  if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
-  return res.text();
-}
-
-/**
- * Carga Cartera vendida probando varias rutas de Google Sheets.
- * La pestaña del archivo adjunto se llama "Cartera"; por eso se prioriza
- * gviz por nombre de hoja y no un gid fijo que puede no existir.
- */
-async function fetchCarteraVendidaText(signal){
-  const errores = [];
-  for(const url of CSV_CARTERA_VENDIDA_CANDIDATES){
-    try{
-      const res = await fetch(csvUrl(url), { cache:'no-store', signal });
-      if(!res.ok){
-        errores.push('HTTP ' + res.status + ' en ' + url);
-        continue;
-      }
-      const txt = await res.text();
-      // Evita aceptar una página HTML de login/error como si fuera CSV.
-      if(!txt || /^\s*<!doctype html/i.test(txt) || /^\s*<html/i.test(txt)){
-        errores.push('Respuesta no CSV en ' + url);
-        continue;
-      }
-      const parsed = parseCSV(txt);
-      if(!parsed.length){
-        errores.push('CSV vacío en ' + url);
-        continue;
-      }
-      return { text:txt, url };
-    } catch(e){
-      if(e && e.name === 'AbortError') throw e;
-      errores.push((e && e.message) ? e.message : String(e));
-    }
-  }
-  throw new Error(
-    (errores.length ? errores.join(' · ') : 'No fue posible leer la fuente') +
-    '. Si el archivo sigue guardado como Excel (.xlsx) en Drive, conviértelo a Google Sheets nativo para habilitar la exportación CSV.'
-  );
-}
-
-async function checkCsvUpdates(silent){
-  if(autoRefreshBusy) return;
-  if(!SESSION) return; // solo con sesión activa
-  autoRefreshBusy = true;
-  try{
-    const [tMaster, tFact, tTasks, tUsers, tMetas, tCarteraVendida] = await Promise.all([
-      fetchTextNoCache(CSV_MASTER).catch(() => null),
-      fetchTextNoCache(CSV_FACTURAS).catch(() => null),
-      fetchTextNoCache(CSV_TAREAS).catch(() => null),
-      fetchTextNoCache(CSV_USERS).catch(() => null),
-      fetchTextNoCache(CSV_METAS).catch(() => null),
-      isGerente() ? fetchCarteraVendidaText().then(r => r.text).catch(() => null) : Promise.resolve(null)
-    ]);
-
-    let changedOps = false;
-    let changedTasks = false;
-    let changedUsers = false;
-    let changedMetas = false;
-    let changedCarteraVendida = false;
-
-    if(tMaster != null){
-      const h = simpleHash(tMaster);
-      if(csvFingerprints.master && csvFingerprints.master !== h) changedOps = true;
-      csvFingerprints.master = h;
-    }
-    if(tFact != null){
-      const h = simpleHash(tFact);
-      if(csvFingerprints.facturas && csvFingerprints.facturas !== h) changedOps = true;
-      csvFingerprints.facturas = h;
-    }
-    if(tTasks != null){
-      const h = simpleHash(tTasks);
-      if(csvFingerprints.tareas && csvFingerprints.tareas !== h) changedTasks = true;
-      csvFingerprints.tareas = h;
-    }
-    if(tUsers != null){
-      const h = simpleHash(tUsers);
-      if(csvFingerprints.users && csvFingerprints.users !== h) changedUsers = true;
-      csvFingerprints.users = h;
-    }
-    if(tMetas != null){
-      const h = simpleHash(tMetas);
-      if(csvFingerprints.metas && csvFingerprints.metas !== h) changedMetas = true;
-      csvFingerprints.metas = h;
-    }
-    if(isGerente() && tCarteraVendida != null){
-      const h = simpleHash(tCarteraVendida);
-      if(csvFingerprints.carteraVendida && csvFingerprints.carteraVendida !== h) changedCarteraVendida = true;
-      csvFingerprints.carteraVendida = h;
-    }
-
-    // Primera pasada: solo guarda huellas, no recarga
-    if(!csvFingerprints._initialized){
-      csvFingerprints._initialized = true;
-      return;
-    }
-
-    if(changedOps){
-      if(!silent) setStatus('Se detectó cambio en los CSV · actualizando…', '');
-      await loadFromCSV();
-      if(typeof reloadTasksAndRender === 'function') await reloadTasksAndRender();
-      setStatus('Datos actualizados automáticamente · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
-    } else if(changedTasks){
-      if(typeof loadTasksFromCSVFile === 'function'){
-        await loadTasksFromCSVFile();
-        if(typeof applyRoleToTasksUI === 'function') applyRoleToTasksUI();
-        setStatus('Tareas actualizadas desde tareas.csv · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
-      }
-    } else if(changedUsers){
-      if(typeof loadUsers === 'function') await loadUsers();
-      setStatus('Usuarios actualizados · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
-    } else if(changedMetas){
-      if(tMetas != null){
-        metasRowsCache = parseCSV(tMetas);
-        METAS_BY_MONTH = buildMetas(metasRowsCache);
-        if(DATA) renderMesCurso();
-        setStatus('Metas actualizadas · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
-      }
-    } else if(isGerente() && changedCarteraVendida){
-      if(tCarteraVendida != null){
-        const parsedCv = parseCSV(tCarteraVendida);
-        if(parsedCv.length) carteraVendidaRowsCache = parsedCv;
-        carteraVendidaLoadError = '';
-        if(DATA) renderCarteraVendida();
-        setStatus('Cartera vendida actualizada · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
-      }
-    }
-  } catch(e){
-    console.warn('Auto-refresh CSV:', e);
-  } finally {
-    autoRefreshBusy = false;
-  }
-}
-
-function startAutoRefresh(){
-  stopAutoRefresh();
-  // Primera huella en silencio
-  checkCsvUpdates(true);
-  autoRefreshTimer = setInterval(() => checkCsvUpdates(false), AUTO_REFRESH_MS);
-  document.addEventListener('visibilitychange', onVisibilityRefresh);
-}
-
-function stopAutoRefresh(){
-  if(autoRefreshTimer){ clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
-  document.removeEventListener('visibilitychange', onVisibilityRefresh);
-}
-
-function onVisibilityRefresh(){
-  if(document.visibilityState === 'visible') checkCsvUpdates(false);
-}
-
-
-document.getElementById('btnPrevYear').addEventListener('click', () => {
-  selectedYear -= 1;
-  rebuildFromCache();
-});
-document.getElementById('btnNextYear').addEventListener('click', () => {
-  selectedYear += 1;
-  rebuildFromCache();
-});
-
-document.getElementById('btnRefresh').addEventListener('click', loadFromCSV);
-
-const btnDownloadCharts = document.getElementById('btnDownloadCharts');
-if(btnDownloadCharts) btnDownloadCharts.addEventListener('click', downloadMesCursoChartsCSV);
-
-const btnDownloadResumen = document.getElementById('btnDownloadResumen');
-if(btnDownloadResumen) btnDownloadResumen.addEventListener('click', downloadResumenCSV);
-
-const btnDownloadFacturas = document.getElementById('btnDownloadFacturas');
-if(btnDownloadFacturas) btnDownloadFacturas.addEventListener('click', downloadFacturasCSV);
-
-const btnDownloadMora = document.getElementById('btnDownloadMora');
-if(btnDownloadMora) btnDownloadMora.addEventListener('click', downloadMoraCSV);
-
-const btnDownloadDetalleFact = document.getElementById('btnDownloadDetalleFact');
-if(btnDownloadDetalleFact) btnDownloadDetalleFact.addEventListener('click', downloadFacturasDetalleCSV);
-
-const btnDownloadExcedentes = document.getElementById('btnDownloadExcedentes');
-if(btnDownloadExcedentes) btnDownloadExcedentes.addEventListener('click', downloadExcedentesCSV);
-
-
-function refreshFacturasSection(){
-  if(DATA){ renderFacturas(); renderFacturasDetalle(); renderDeudorConcentration(); renderExcedenteRetenido(); renderCesion(); }
-}
-['factEstadoFilter','factWarrenFilter','factWarrenSort','factUrgFilter'].forEach(id => {
-  const el = document.getElementById(id);
-  if(el) el.addEventListener('change', refreshFacturasSection);
-});
-const factExcedenteFilter = document.getElementById('factExcedenteFilter');
-if(factExcedenteFilter){
-  factExcedenteFilter.addEventListener('change', () => { if(DATA) renderExcedenteRetenido(); });
-}
-const factSearch = document.getElementById('factSearch');
-if(factSearch){
-  let t;
-  factSearch.addEventListener('input', () => {
-    clearTimeout(t);
-    t = setTimeout(refreshFacturasSection, 250);
-  });
-}
-const factAgeMax = document.getElementById('factAgeMax');
-const factAgeMaxVal = document.getElementById('factAgeMaxVal');
-const factAgeUnlimited = document.getElementById('factAgeUnlimited');
-function syncAgeMaxUI(){
-  if(!factAgeMax) return;
-  const v = parseInt(factAgeMax.value, 10) || 0;
-  factAgeMax.setAttribute('aria-valuenow', String(v));
-  if(factAgeMaxVal) factAgeMaxVal.textContent = v === 0 ? '∞' : String(v);
-  if(factAgeUnlimited) factAgeUnlimited.hidden = v !== 0;
-}
-if(factAgeMax){
-  syncAgeMaxUI();
-  factAgeMax.addEventListener('input', () => { syncAgeMaxUI(); });
-  factAgeMax.addEventListener('change', () => { syncAgeMaxUI(); refreshFacturasSection(); });
-}
-const moraTramoFilter = document.getElementById('moraTramoFilter');
-if(moraTramoFilter){
-  moraTramoFilter.addEventListener('change', () => { if(DATA) renderMora(); });
-}
-
-
-['cvEstadoCarteraFilter','cvEstadoPagoFilter','cvFondoFilter'].forEach(id => {
-  const el = document.getElementById(id);
-  if(el) el.addEventListener('change', () => { if(DATA) renderCarteraVendida(); });
-});
-const cvSearch = document.getElementById('cvSearch');
-if(cvSearch){
-  let cvSearchTimer;
-  cvSearch.addEventListener('input', () => {
-    clearTimeout(cvSearchTimer);
-    cvSearchTimer = setTimeout(() => { if(DATA) renderCarteraVendida(); }, 180);
-  });
-}
-const btnDownloadCarteraVendida = document.getElementById('btnDownloadCarteraVendida');
-if(btnDownloadCarteraVendida) btnDownloadCarteraVendida.addEventListener('click', downloadCarteraVendidaCSV);
 
 initCollapsibleSections();
 wireTasksUI();
