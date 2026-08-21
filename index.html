@@ -3449,7 +3449,7 @@ function renderKpis(){
       tone: '', label: 'Clientes activos',
       value: fmtInt(Math.round(cur.clientes_activos || 0)),
       delta: pctDelta(cur.clientes_activos || 0, prev.clientes_activos || 0),
-      sub: '(33) monto a financiar > $0 · ' + baseLabel
+      sub: baseLabel
     },
     {
       tone: 'acqua', label: 'Monto anticipo',
@@ -3461,7 +3461,7 @@ function renderKpis(){
       tone: '', label: 'Cartera vigente',
       value: fmtCLP(cur.cartera_vigente || 0),
       delta: pctDelta(cur.cartera_vigente || 0, prev.cartera_vigente || 0),
-      sub: '(55) Monto vigente · ' + baseLabel
+      sub: baseLabel
     },
     {
       tone: 'gold', label: 'Diferencia de precio',
@@ -3485,13 +3485,13 @@ function renderKpis(){
       tone: 'gold', label: 'Tasa promedio ponderada',
       value: fmtPct2(tasaPondCur),
       delta: pctDelta(tasaPondCur, tasaPondPrev),
-      sub: '(40) Tasa interés mensual · ponderada por (33) Monto a financiar · ' + baseLabel
+      sub: baseLabel
     },
     {
       tone: '', label: 'Facturas promedio',
       value: fmtCLP(ticketCur),
       delta: pctDelta(ticketCur, ticketPrev),
-      sub: 'monto ÷ operaciones'
+      sub: baseLabel
     }
   ];
 
@@ -4591,7 +4591,7 @@ function renderCarteraVendida(){
   const fondos = new Set(rows.map(r=>cvNorm(r['Fondo Final'])).filter(Boolean));
 
   kpis.innerHTML = `
-    <div class="cv-kpi"><div class="cv-label">Operaciones visibles</div><div class="cv-value">${fmtInt(rows.length)}</div><div class="cv-meta">filas del origen</div></div>
+    <div class="cv-kpi"><div class="cv-label">Facturas vendidas</div><div class="cv-value">${fmtInt(rows.length)}</div><div class="cv-meta">filas del origen</div></div>
     <div class="cv-kpi"><div class="cv-label">Monto operación</div><div class="cv-value">${fmtCLP(montoTotal)}</div><div class="cv-meta">monto vendido visible</div></div>
     <div class="cv-kpi"><div class="cv-label">Saldo pendiente</div><div class="cv-value">${fmtCLP(saldoTotal)}</div><div class="cv-meta">saldo por recuperar</div></div>
     <div class="cv-kpi"><div class="cv-label">Cartera pagada</div><div class="cv-value">${fmtCLP(montoPagado)}</div><div class="cv-meta">${fmtInt(pagadas.length)} operación(es) · ${fmtInt(fondos.size)} fondo(s)</div></div>`;
