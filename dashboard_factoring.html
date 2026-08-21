@@ -4630,16 +4630,19 @@ function renderCarteraVendida(){
       <td class="left" style="font-weight:400">${escapeHtml(cvNorm(r['Fondo Final']) || '—')}</td>
       <td><span class="cv-status ${cvStatusClass(r['Estado Asignación'])}">${escapeHtml(cvNorm(r['Estado Asignación']) || '—')}</span></td>
       <td>${fmtWarren(toNum(r['Warren']))}</td>
+      <td>${fmtCLP(toNum(r['Gastos']))}</td>
+      <td>${fmtCLP(toNum(r['Interés']))}</td>
+      <td>${fmtCLP(toNum(r['A Pago']))}</td>
       <td>${cvPct(r['Tasa Efectiva Cobrada'])}</td>
       <td>${cvFmtDate(r['Fecha Curse Operación'])}</td>
     </tr>`;
   });
-  if(!body) body = '<tr><td colspan="14" style="text-align:center;color:#6b7a8c">Sin operaciones para los filtros seleccionados.</td></tr>';
+  if(!body) body = '<tr><td colspan="17" style="text-align:center;color:#6b7a8c">Sin operaciones para los filtros seleccionados.</td></tr>';
 
   table.innerHTML = `<thead><tr>
     <th class="left">Cliente</th><th class="left">Deudor</th><th>Folio</th><th>Monto operación</th><th>Saldo pendiente</th>
     <th>Vencimiento</th><th>Días</th><th>Estado cartera</th><th>Estado pago</th><th class="left">Fondo final</th>
-    <th>Asignación</th><th>Warren</th><th>Tasa efectiva</th><th>Fecha curse</th>
+    <th>Asignación</th><th>Warren</th><th>Gastos</th><th>Interés</th><th>A Pago</th><th>Tasa efectiva</th><th>Fecha curse</th>
   </tr></thead><tbody>${body}</tbody>`;
   window._carteraVendidaExport = exportRows;
 }
