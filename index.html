@@ -1620,7 +1620,7 @@ select#execFilter:focus-visible{
 
 <section class="block" id="secTareas">
     <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Lista de tareas</h2></div>
-    <p class="sec-desc">Pendientes operativos del equipo. La fuente es la hoja de tareas en Google Sheets. Gerencia asigna y administra; cada ejecutivo visualiza únicamente las tareas a su cargo.</p>
+    <p class="sec-desc">Pendientes operativos del equipo. El dashboard es de solo lectura: para agregar, editar o marcar tareas como hechas se utiliza la hoja de tareas en Google Sheets. Cada ejecutivo visualiza únicamente las tareas a su cargo.</p>
     <div class="card">
       <div class="task-filters">
         <label for="taskFilterExec">Ejecutivo</label>
@@ -1642,11 +1642,9 @@ select#execFilter:focus-visible{
         </select>
       </div>
       <ul class="task-list" id="taskList" aria-label="Tareas"></ul>
-      <div class="chart-download-row" style="margin-top:14px; gap:10px; flex-wrap:wrap;">
-        <button type="button" id="btnTaskExport" class="btn-refresh" title="Descargar tareas en CSV">⬇ Exportar tareas (CSV)</button>
-        <button type="button" id="btnTaskImport" class="btn-refresh" title="Cargar tareas desde un CSV">⬆ Importar CSV</button>
-        <input type="file" id="taskImportFile" accept=".csv,text/csv" hidden>
-        <button type="button" id="btnTaskClearDone" class="btn-refresh" title="Eliminar las tareas marcadas como hechas">Limpiar hechas</button>
+      <div class="task-sheet-note" style="margin-top:16px;padding:13px 15px;border:1px solid #b8d9f0;border-radius:10px;background:var(--celeste-soft);font-size:13px;color:var(--ink-soft);line-height:1.5;">
+        Para modificar las tareas, es decir, <b>agregar nuevas tareas o marcarlas como hechas</b>, accede al
+        <a href="https://docs.google.com/spreadsheets/d/1Dp00vNV4xwQhuJvMnohpiupu22hsWGXxcF-FVph2Lpo/edit?usp=sharing" target="_blank" rel="noopener noreferrer" style="color:var(--blue);font-weight:700;text-decoration:none;">Google Sheet de tareas ↗</a>.
       </div>
     </div>
   </section>
@@ -4854,8 +4852,8 @@ function renderTasks(){
 
   if(!rows.length){
     list.innerHTML = '<li class="task-empty">' + (isEjecutivo()
-      ? 'No tienes tareas asignadas. Cuando gerencia te asigne algo en tareas.csv (o desde esta pantalla), aparecerá aquí.'
-      : 'No hay tareas con este filtro. Agrega una arriba o importa un CSV.') + '</li>';
+      ? 'No tienes tareas asignadas. Cuando se te asigne una tarea en Google Sheets, aparecerá aquí.'
+      : 'No hay tareas con este filtro. Las tareas se administran desde Google Sheets.') + '</li>';
     return;
   }
 
@@ -4870,9 +4868,9 @@ function renderTasks(){
     if(exec) meta.push(`<span class="pill">${escapeHtml(exec)}</span>`);
     if(fecha) meta.push(`<span class="pill">📅 ${escapeHtml(fecha)}</span>`);
     return `<li class="task-item ${done ? 'done' : ''}" data-id="${escapeHtml(t.id)}">
-      <input type="checkbox" ${done ? 'checked' : ''} aria-label="Marcar hecha" data-act="toggle">
+      <input type="checkbox" ${done ? 'checked' : ''} aria-label="Estado de la tarea" disabled title="Para modificar el estado, usa el Google Sheet de tareas">
       <div>
-        <input class="task-title" type="text" value="${escapeHtml(t.tarea || '')}" data-act="edit" maxlength="300" aria-label="Texto de la tarea" ${isEjecutivo() ? 'readonly' : ''}>
+        <input class="task-title" type="text" value="${escapeHtml(t.tarea || '')}" maxlength="300" aria-label="Texto de la tarea" readonly title="Para editar la tarea, usa el Google Sheet de tareas">
         <div class="task-meta">${meta.join('')}</div>
       </div>
       <div class="task-actions">
@@ -5151,7 +5149,7 @@ function applyRoleToTasksUI(){
       execEl.style.opacity = '';
     }
     if(desc){
-      desc.innerHTML = 'Gestión de pendientes del equipo. Gerencia crea y asigna; cada ejecutivo visualiza solo las suyas. Fuente: hoja de tareas en Google Sheets.';
+      desc.innerHTML = 'Gestión de pendientes del equipo. Esta vista es de solo lectura; las modificaciones se realizan directamente en la hoja de tareas de Google Sheets. Cada ejecutivo visualiza solo las suyas.';
     }
   }
   renderTasks();
