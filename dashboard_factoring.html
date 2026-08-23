@@ -169,10 +169,21 @@
 
   .sec-head{display:flex; align-items:center; gap:12px; margin-bottom:8px;}
   .sec-num{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600;
-    color:var(--white); background:linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%);
-    border-radius:8px; padding:5px 10px;
-    box-shadow: 0 2px 8px rgba(42,92,85,0.25);
+    min-width:32px;
+    height:32px;
+    padding:0 9px;
+    flex:0 0 auto;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    font-weight:600;
+    line-height:1;
+    color:var(--white);
+    background:linear-gradient(135deg, var(--aqua) 0%, var(--navy-deep) 100%);
+    border-radius:9px;
+    box-shadow:0 3px 10px rgba(0,97,164,0.24);
   }
   h2.sec-title{
     font-family:'Fraunces',serif; font-weight:600; font-size:25px; margin:0; color:var(--ink);
@@ -1341,7 +1352,7 @@ select#execFilter:focus-visible{
 
   <!-- SECTION 1 -->
   <section class="block" id="secResumen" hidden>
-    <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Resumen General</h2></div>
+    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Resumen General</h2></div>
     <p class="sec-desc">Desempeño anual por ejecutivo y mes: operaciones, monto anticipado, diferencia de precio y clientes nuevos. El año se selecciona con las flechas de la barra superior.</p>
     <div class="card">
       <table id="tbl-resumen"></table>
@@ -1361,7 +1372,7 @@ select#execFilter:focus-visible{
   </div>
 
 <section class="block" id="secMora">
-    <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Aging de mora</h2></div>
+    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Aging de mora</h2></div>
     <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente:</b> facturas sin mora. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. <b>Monto</b> corresponde a (33) Monto a financiar, <b>% de la cartera</b> es la participación de cada tramo sobre la cartera total e <b>Interés mora</b> corresponde a (68) Interes Mora × (33) Monto a financiar.</p>
     <div class="ctx-bar" id="ctxMora">
       <span class="ctx-pill" id="ctxMoraPill">—</span>
@@ -1409,7 +1420,7 @@ select#execFilter:focus-visible{
   </div>
 
 <section class="block">
-    <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Facturas nuevas</h2></div>
+    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Facturas nuevas</h2></div>
     <p class="sec-desc">Inventario de facturas por empresa. <b>Disponibles:</b> sin financiera asignada, aptas para cesión. <b>Cedidas:</b> ya asignadas a un banco o fondo. Filtros disponibles: estado, puntaje Warren, búsqueda por nombre y antigüedad (días desde la fecha de la factura).</p>
     <div class="sec-filters" id="factFilters">
       <label for="factEstadoFilter">Estado</label>
@@ -1519,7 +1530,7 @@ select#execFilter:focus-visible{
     </div>
   </section>
 <section class="block" id="secCesion">
-    <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
+    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Embudo de cesión y financieras</h2></div>
     <p class="sec-desc">Estado del inventario de facturas: monto disponible para cesión versus monto ya cedido. El ranking identifica las financieras con mayor volumen asignado.</p>
     <div class="ctx-bar" id="ctxCesion">
       <span class="ctx-pill" id="ctxCesionPill">—</span>
@@ -1552,7 +1563,7 @@ select#execFilter:focus-visible{
 
 
 <section class="block gerencia-only" id="secCarteraVendida" hidden>
-    <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Cartera vendida</h2></div>
+    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Cartera vendida</h2></div>
     <p class="sec-desc">Seguimiento de operaciones vendidas y asignadas a fondos. La tabla muestra cada operación individual, su saldo pendiente, vencimiento, estado de cartera, pago y fondo final.</p>
     <div class="ctx-bar" id="ctxCarteraVendida">
       <span class="ctx-pill" id="ctxCarteraVendidaPill">—</span>
@@ -1586,7 +1597,7 @@ select#execFilter:focus-visible{
   </div>
 
 <section class="block">
-    <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Mes en curso</h2></div>
+    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Mes en curso</h2></div>
     <p class="sec-desc" id="mesCursoDesc">Comparativo del mes en curso entre ejecutivos: volumen anticipado y diferencia de precio generada. Los gráficos utilizan los mismos montos de la tabla.</p>
     <div class="ctx-bar" id="ctxMesCurso">
       <span class="ctx-pill" id="ctxMesCursoPill">—</span>
@@ -1624,7 +1635,7 @@ select#execFilter:focus-visible{
   </div>
 
 <section class="block" id="secTareas">
-    <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Lista de tareas</h2></div>
+    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Lista de tareas</h2></div>
     <p class="sec-desc">Pendientes operativos del equipo. El dashboard es de solo lectura: para agregar, editar o marcar tareas como hechas se utiliza la hoja de tareas en Google Sheets. Cada ejecutivo visualiza únicamente las tareas a su cargo.</p>
     <div class="card">
       <div class="task-filters">
@@ -1763,6 +1774,30 @@ function isGerente(){ return SESSION && SESSION.rol === 'gerente'; }
 function isEjecutivo(){ return SESSION && SESSION.rol === 'ejecutivo'; }
 
 /**
+ * Numera únicamente las secciones actualmente visibles.
+ * Así, si una sección exclusiva de Gerencia está oculta para un ejecutivo,
+ * las siguientes secciones se renumeran automáticamente sin dejar saltos.
+ */
+function renumberVisibleSections(){
+  let n = 1;
+  document.querySelectorAll('section.block').forEach(sec => {
+    const badge = sec.querySelector(':scope > .sec-head .sec-num');
+    if(!badge) return;
+
+    const visible = !sec.hidden && getComputedStyle(sec).display !== 'none';
+    if(visible){
+      badge.textContent = String(n++);
+      badge.removeAttribute('aria-hidden');
+      badge.setAttribute('aria-label', 'Sección ' + badge.textContent);
+    } else {
+      badge.textContent = '';
+      badge.setAttribute('aria-hidden', 'true');
+      badge.removeAttribute('aria-label');
+    }
+  });
+}
+
+/**
  * Cartera vendida es una vista exclusiva de gerencia.
  * Además de ocultar el bloque, evita cargar/retener sus filas en sesiones de ejecutivo.
  */
@@ -1779,6 +1814,8 @@ function applyRoleVisibility(){
     carteraVendidaRowsCache = [];
     carteraVendidaLoadError = '';
   }
+
+  renumberVisibleSections();
 }
 
 function showApp(){
@@ -1797,6 +1834,7 @@ function showApp(){
 
   // Visibilidad por rol: Cartera vendida es exclusiva de gerencia.
   applyRoleVisibility();
+  renumberVisibleSections();
 
   // Restringir filtro de ejecutivo
   applyRoleToFilters();
