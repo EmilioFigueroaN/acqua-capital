@@ -1376,7 +1376,7 @@ select#execFilter:focus-visible{
     <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente:</b> facturas sin mora. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. <b>Monto</b> corresponde al <b>Monto anticipo</b> = (33) Monto a financiar − (10) Abono pyme, <b>% de la cartera</b> es la participación de cada tramo sobre la cartera total e <b>Interés mora</b> corresponde a (68) Interes Mora × Monto anticipo.</p>
     <div class="ctx-bar" id="ctxMora">
       <span class="ctx-pill" id="ctxMoraPill">—</span>
-      <span class="ctx-text" id="ctxMoraText">Fuente: (19) Días de mora, (33) Monto a financiar, (10) Abono pyme y (68) Interes Mora. El monto de mora usa Monto anticipo = (33) − (10), y el interés mora se calcula como (68) × Monto anticipo. Respeta el filtro de ejecutivo.</span>
+      <span class="ctx-text" id="ctxMoraText">Fuente: (19) Días de mora, (33) Monto a financiar, (10) Abono pyme y (68) Interes Mora. El monto de mora usa Monto anticipo = (33) − (10); si ese monto es menor o igual a 0, la fila se excluye. El interés mora se calcula como (68) × Monto anticipo. Respeta el filtro de ejecutivo.</span>
     </div>
     <div class="card">
       <div class="sec-filters" id="moraFilters" style="margin-bottom:12px;">
@@ -3953,6 +3953,10 @@ function renderMora(){
 
     // Monto base de mora: Monto anticipo = (33) Monto a financiar - (10) Abono pyme.
     const monto = masterMontoAnticipo(r, masterSchema);
+
+    // Si el monto es menor o igual a 0, se excluye del análisis de mora.
+    // No corresponde a cartera efectivamente vigente ni en mora para esta vista.
+    if(monto <= 0) return;
 
     // Monto de interés de mora:
     // (68) Interes Mora × Monto anticipo.
