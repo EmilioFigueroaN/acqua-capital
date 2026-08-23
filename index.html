@@ -1318,7 +1318,7 @@ select#execFilter:focus-visible{
       </div>
       <div class="intel-card">
         <h3>Concentración por deudor (quien paga)</h3>
-        <p class="intel-sub"><b>Deudor:</b> empresa obligada al pago de la factura. El gráfico muestra qué proporción del book depende de cada pagador. Concentraciones altas en un solo deudor aumentan el riesgo de cobranza.</p>
+        <p class="intel-sub"><b>Deudor:</b> empresa obligada al pago de la factura. El gráfico usa (28) Empresa deudora y muestra qué proporción de la cartera operativa depende de cada pagador. Concentraciones altas en un solo deudor aumentan el riesgo de cobranza.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxDeudorPill">—</span>
           <span class="ctx-text" id="ctxDeudorText">Fuente: operaciones del maestro. Respeta el filtro de ejecutivo seleccionado.</span>
@@ -3579,12 +3579,10 @@ function renderConcentration(){
     return { book:0, items:[], top1:0, top3:0, top5:0 };
   }
 
-  const sample = rows[0] || {};
-  const keys = Object.keys(sample);
-  const colCli = keys.find(k => /empresa\s*solicitante/i.test(k)) || '(26)Empresa solicitante';
-  const colDeu = keys.find(k => /empresa\s*deudora/i.test(k) && !/rut/i.test(k)) || '(28)Empresa deudora';
-  const colExec = keys.find(k => /\(\d+\)\s*Ejecutivo/i.test(k) || /^ejecutivo$/i.test(k)) || keys.find(k => /ejecutivo/i.test(k)) || 'Ejecutivo';
   const masterSchema = resolveMasterSchema(rows);
+  const colCli = masterSchema.cliente || '(26)Empresa solicitante';
+  const colDeu = masterSchema.deudor || '(28)Empresa deudora';
+  const colExec = masterSchema.exec || '(29)Ejecutivo';
 
   const by = {};
   rows.forEach(r => {
@@ -3613,7 +3611,12 @@ function renderConcentration(){
       .sort((a,b) => b.total - a.total)
   })).filter(x => x.total > 0);
   items.sort((a,b) => b.total - a.total);
-  const book = items.reduce((s,x) => s + x.total, 0);
+
+  // Base única de concentración: suma fila a fila del monto anticipo,
+  // exactamente (33) Monto a financiar - (10) Abono pyme.
+  // No se recalcula desde los grupos positivos, para que cliente y deudor
+  // compartan siempre el mismo total de cartera operativa.
+  const book = rows.reduce((s,r) => s + masterMontoAnticipo(r, masterSchema), 0);
 
   if(pill) pill.textContent = (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
 
@@ -3871,17 +3874,21 @@ function renderMora(){
     b.monto += monto;
     b.interesMora += interesMora;
 
-    // Desplegable por empresa dentro del tramo.
-    const empresa = masterSchema.cliente
-      ? (String(r[masterSchema.cliente] || '').trim() || 'Sin empresa')
-      : 'Sin empresa';
+    // Desplegable por DEUDOR dentro del tramo.
+    // Nombre: (28) Empresa deudora.
+    // Monto: mismo criterio usado en las concentraciones previas:
+    // (33) Monto a financiar - (10) Abono pyme.
+    const deudor = masterSchema.deudor
+      ? (String(r[masterSchema.deudor] || '').trim() || 'Sin deudor')
+      : 'Sin deudor';
+    const montoAnticipoDeudor = masterMontoAnticipo(r, masterSchema);
 
-    if(!b.empresas[empresa]){
-      b.empresas[empresa] = { monto:0, interesMora:0, facturas:0 };
+    if(!b.empresas[deudor]){
+      b.empresas[deudor] = { monto:0, interesMora:0, facturas:0 };
     }
-    b.empresas[empresa].monto += monto;
-    b.empresas[empresa].interesMora += interesMora;
-    b.empresas[empresa].facturas += 1;
+    b.empresas[deudor].monto += montoAnticipoDeudor;
+    b.empresas[deudor].interesMora += interesMora;
+    b.empresas[deudor].facturas += 1;
   });
 
   const orderAll = ['vigente','m015','m1530','m2','m3'];
@@ -3942,11 +3949,11 @@ function renderMora(){
 
     const companyHtml = empresas.length
       ? `<ul class="mora-company-list">${empresas.map((e,i) => `
-          <li title="${escapeHtml(e.nombre)} · ${e.facturas} factura(s) · Interés mora ${fmtCLP(e.interesMora)}">
+          <li title="${escapeHtml(e.nombre)} · ${e.facturas} factura(s) · Monto anticipo ${fmtCLP(e.monto)} · Interés mora ${fmtCLP(e.interesMora)}">
             <span class="mc-name">${i+1}. ${escapeHtml(e.nombre)}</span>
             <span class="mc-amount">${fmtCLP(e.monto)}</span>
           </li>`).join('')}</ul>`
-      : '<div class="mora-company-empty">Sin empresas en este tramo.</div>';
+      : '<div class="mora-company-empty">Sin deudores en este tramo.</div>';
 
     return `<div class="mora-tile ${b.cls}">
       <div class="mt-label">${b.label}</div>
@@ -3954,7 +3961,7 @@ function renderMora(){
       <div class="mt-meta">${b.facturas} facturas · ${pct.toFixed(1).replace('.',',')}% de la cartera</div>
       <div class="mora-bar-wrap"><div class="mora-track"><div class="mora-fill ${b.cls}" style="width:${Math.min(Math.max(pct,0),100)}%"></div></div></div>
       <details class="mora-drop">
-        <summary>Ver empresas (${empresas.length})</summary>
+        <summary>Ver deudores (${empresas.length})</summary>
         ${companyHtml}
       </details>
     </div>`;
@@ -4169,10 +4176,8 @@ function renderDeudorConcentration(){
     return;
   }
 
-  const sample = rows[0] || {};
-  const keys = Object.keys(sample);
-  const colName = keys.find(k => /empresa\s*deudora/i.test(k) && !/rut/i.test(k)) || '(28)Empresa deudora';
   const masterSchema = resolveMasterSchema(rows);
+  const colName = masterSchema.deudor || '(28)Empresa deudora';
 
   const byD = {};
   rows.forEach(r => {
@@ -4184,7 +4189,10 @@ function renderDeudorConcentration(){
 
   const items = Object.keys(byD).map(n => ({ nombre: n, total: byD[n] })).filter(x => x.total > 0);
   items.sort((a,b) => b.total - a.total);
-  const book = items.reduce((s,x) => s + x.total, 0);
+
+  // Misma base usada en concentración por cliente:
+  // suma fila a fila de (33) Monto a financiar - (10) Abono pyme.
+  const book = rows.reduce((s,r) => s + masterMontoAnticipo(r, masterSchema), 0);
 
   const deudorPill = document.getElementById('ctxDeudorPill');
   if(deudorPill) deudorPill.textContent = (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
