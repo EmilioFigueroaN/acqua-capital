@@ -1307,7 +1307,7 @@ select#execFilter:focus-visible{
     <div class="intel-grid">
       <div class="intel-card">
         <h3>Concentración por cliente (cedente)</h3>
-        <p class="intel-sub"><b>Cliente (cedente):</b> empresa a la que Acqua anticipa el pago de sus facturas. El gráfico ordena a los principales clientes por participación en el monto total anticipado. Una participación igual o superior al <b>25%</b> se considera concentración elevada. Bajo cada barra se detalla la participación por ejecutivo; al expandir un cliente se muestra su top 5 de deudores.</p>
+        <p class="intel-sub"><b>Cliente (cedente):</b> empresa a la que Acqua anticipa el pago de sus facturas. El gráfico ordena a los principales clientes por participación en el monto total anticipado del período seleccionado arriba. Una participación igual o superior al <b>25%</b> se considera concentración elevada. Bajo cada barra se detalla la participación por ejecutivo; al expandir un cliente se muestra su top 5 de deudores.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxConcPill">—</span>
           <span class="ctx-text" id="ctxConcText">Fuente: operaciones del maestro. Respeta el filtro de ejecutivo seleccionado.</span>
@@ -1318,7 +1318,7 @@ select#execFilter:focus-visible{
       </div>
       <div class="intel-card">
         <h3>Concentración por deudor (quien paga)</h3>
-        <p class="intel-sub"><b>Deudor:</b> empresa obligada al pago de la factura. El gráfico usa (28) Empresa deudora y muestra qué proporción de la cartera operativa depende de cada pagador. Concentraciones altas en un solo deudor aumentan el riesgo de cobranza.</p>
+        <p class="intel-sub"><b>Deudor:</b> empresa obligada al pago de la factura. El gráfico usa (28) Empresa deudora y muestra qué proporción de la cartera operativa del período seleccionado depende de cada pagador. Concentraciones altas en un solo deudor aumentan el riesgo de cobranza.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxDeudorPill">—</span>
           <span class="ctx-text" id="ctxDeudorText">Fuente: operaciones del maestro. Respeta el filtro de ejecutivo seleccionado.</span>
@@ -3329,7 +3329,7 @@ function setupKpiControls(){
     modeEl.addEventListener('change', () => {
       kpiMode = modeEl.value;
       applyKpiModeUI(kpiMode);
-      renderKpis(); updateContextBars();
+      renderKpis(); updateContextBars(); renderIntel();
     });
     if(dayEl) dayEl.addEventListener('change', () => {
       kpiDay = dayEl.value;
@@ -3338,7 +3338,7 @@ function setupKpiControls(){
         kpiDayBase = shiftDateISO(kpiDay, -1);
         if(dayBaseEl) dayBaseEl.value = kpiDayBase;
       }
-      renderKpis(); updateContextBars();
+      renderKpis(); updateContextBars(); renderIntel();
     });
     if(dayBaseEl) dayBaseEl.addEventListener('change', () => {
       kpiDayBase = dayBaseEl.value;
@@ -3352,7 +3352,7 @@ function setupKpiControls(){
         kpiWeekBase = shiftDateISO(kpiWeek, -7);
         if(weekBaseEl) weekBaseEl.value = kpiWeekBase;
       }
-      renderKpis(); updateContextBars();
+      renderKpis(); updateContextBars(); renderIntel();
     });
     if(weekBaseEl) weekBaseEl.addEventListener('change', () => {
       const d = parseFullDate(weekBaseEl.value);
@@ -3360,14 +3360,14 @@ function setupKpiControls(){
       else kpiWeekBase = weekBaseEl.value;
       renderKpis(); updateContextBars();
     });
-    if(selMonth) selMonth.addEventListener('change', () => { kpiMonthYm = selMonth.value; renderKpis(); updateContextBars(); });
+    if(selMonth) selMonth.addEventListener('change', () => { kpiMonthYm = selMonth.value; renderKpis(); updateContextBars(); renderIntel(); });
     if(selBase) selBase.addEventListener('change', () => { kpiBase = selBase.value; renderKpis(); updateContextBars(); });
     if(selYear) selYear.addEventListener('change', () => {
       kpiYear = Number(selYear.value);
       if(Number(kpiYearBase) === Number(kpiYear)){
         kpiYearBase = Number(kpiYear) - 1;
       }
-      renderKpis(); updateContextBars();
+      renderKpis(); updateContextBars(); renderIntel();
     });
     if(selYearBase) selYearBase.addEventListener('change', () => {
       kpiYearBase = Number(selYearBase.value);
@@ -3565,15 +3565,81 @@ function updateContextBars(){
 }
 
 
+
+/**
+ * Filtra las concentraciones por el MISMO período analizado en los KPI.
+ * - Mes/año: usa el período operativo del maestro ((23) Colocado mes,
+ *   con fallback a (47) Fecha creación).
+ * - Día/semana: usa (47) Fecha creación, igual que los KPI de esos modos.
+ * El período base de comparación NO afecta la concentración.
+ */
+function concentrationRowsForSelectedPeriod(){
+  const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
+  if(!rows.length) return [];
+  const schema = resolveMasterSchema(rows);
+
+  if(kpiMode === 'month'){
+    const ym = kpiMonthYm || (DATA && DATA.generated_current_month) || null;
+    if(!ym) return rows;
+    return rows.filter(r => masterPeriodYM(r, schema) === ym);
+  }
+
+  if(kpiMode === 'year'){
+    const y = Number(kpiYear) || new Date().getFullYear();
+    return rows.filter(r => {
+      const ym = masterPeriodYM(r, schema);
+      return ym && Number(String(ym).slice(0,4)) === y;
+    });
+  }
+
+  if(kpiMode === 'day'){
+    const target = kpiDay || toISODate(new Date());
+    return rows.filter(r => {
+      if(!schema.fechaCreacion) return false;
+      const d = parseFullDate(r[schema.fechaCreacion]);
+      return d && toISODate(d) === target;
+    });
+  }
+
+  if(kpiMode === 'week'){
+    let mon = parseFullDate(kpiWeek) || mondayOf(new Date());
+    mon = mondayOf(mon);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+    return rows.filter(r => {
+      if(!schema.fechaCreacion) return false;
+      const d = parseFullDate(r[schema.fechaCreacion]);
+      return d && d >= mon && d <= sun;
+    });
+  }
+
+  return rows;
+}
+
+function concentrationSelectedPeriodLabel(){
+  if(kpiMode === 'month'){
+    const ym = kpiMonthYm || (DATA && DATA.generated_current_month);
+    return ym ? labelMonth(ym) : 'Período seleccionado';
+  }
+  if(kpiMode === 'year') return String(Number(kpiYear) || new Date().getFullYear());
+  if(kpiMode === 'day') return fmtISO_es(kpiDay || toISODate(new Date()));
+  if(kpiMode === 'week'){
+    let mon = parseFullDate(kpiWeek) || mondayOf(new Date());
+    mon = mondayOf(mon);
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    return fmtISO_es(toISODate(mon)) + ' → ' + fmtISO_es(toISODate(sun));
+  }
+  return 'Período seleccionado';
+}
+
 function renderConcentration(){
   const meters = document.getElementById('concMeters');
   const summary = document.getElementById('concSummary');
   const pill = document.getElementById('ctxConcPill');
   if(!meters) return { book:0, items:[], top1:0, top3:0, top5:0 };
 
-  const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
+  const rows = concentrationRowsForSelectedPeriod();
   if(!rows.length){
-    meters.innerHTML = '<p class="insight-empty">No hay operaciones en el maestro para calcular la concentración de clientes.</p>';
+    meters.innerHTML = '<p class="insight-empty">No hay operaciones en el período seleccionado para calcular la concentración de clientes.</p>';
     if(summary) summary.innerHTML = '';
     if(pill) pill.textContent = 'Sin datos';
     return { book:0, items:[], top1:0, top3:0, top5:0 };
@@ -3618,7 +3684,7 @@ function renderConcentration(){
   // compartan siempre el mismo total de cartera operativa.
   const book = rows.reduce((s,r) => s + masterMontoAnticipo(r, masterSchema), 0);
 
-  if(pill) pill.textContent = (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
+  if(pill) pill.textContent = concentrationSelectedPeriodLabel() + ' · ' + (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
 
   if(!items.length || book <= 0){
     meters.innerHTML = '<p class="insight-empty">No hay montos de clientes disponibles en el maestro.</p>';
@@ -3864,6 +3930,7 @@ function renderMora(){
     const interesMora = tasaInteresMora * monto;
 
     let b;
+    // Días de mora negativos o iguales a 0 no son mora: se consideran Vigente.
     if(dias <= 0) b = buckets.vigente;
     else if(dias <= 15) b = buckets.m015;
     else if(dias <= 30) b = buckets.m1530;
@@ -3876,17 +3943,18 @@ function renderMora(){
 
     // Desplegable por DEUDOR dentro del tramo.
     // Nombre: (28) Empresa deudora.
-    // Monto: mismo criterio usado en las concentraciones previas:
-    // (33) Monto a financiar - (10) Abono pyme.
+    // Monto mostrado: (33) Monto a financiar.
     const deudor = masterSchema.deudor
       ? (String(r[masterSchema.deudor] || '').trim() || 'Sin deudor')
       : 'Sin deudor';
-    const montoAnticipoDeudor = masterMontoAnticipo(r, masterSchema);
+    const montoFinanciarDeudor = masterSchema.montoAFinanciar
+      ? toNum(r[masterSchema.montoAFinanciar])
+      : 0;
 
     if(!b.empresas[deudor]){
       b.empresas[deudor] = { monto:0, interesMora:0, facturas:0 };
     }
-    b.empresas[deudor].monto += montoAnticipoDeudor;
+    b.empresas[deudor].monto += montoFinanciarDeudor;
     b.empresas[deudor].interesMora += interesMora;
     b.empresas[deudor].facturas += 1;
   });
@@ -3949,7 +4017,7 @@ function renderMora(){
 
     const companyHtml = empresas.length
       ? `<ul class="mora-company-list">${empresas.map((e,i) => `
-          <li title="${escapeHtml(e.nombre)} · ${e.facturas} factura(s) · Monto anticipo ${fmtCLP(e.monto)} · Interés mora ${fmtCLP(e.interesMora)}">
+          <li title="${escapeHtml(e.nombre)} · ${e.facturas} factura(s) · Monto a financiar ${fmtCLP(e.monto)} · Interés mora ${fmtCLP(e.interesMora)}">
             <span class="mc-name">${i+1}. ${escapeHtml(e.nombre)}</span>
             <span class="mc-amount">${fmtCLP(e.monto)}</span>
           </li>`).join('')}</ul>`
@@ -4167,9 +4235,9 @@ function renderDeudorConcentration(){
   if(!meters) return;
 
   // Deudores reales = Empresa deudora del maestro de operaciones
-  const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
+  const rows = concentrationRowsForSelectedPeriod();
   if(!rows.length){
-    meters.innerHTML = '<p class="insight-empty">Sin operaciones en el maestro para calcular concentración de deudores.</p>';
+    meters.innerHTML = '<p class="insight-empty">Sin operaciones en el período seleccionado para calcular concentración de deudores.</p>';
     if(summary) summary.innerHTML = '';
     const pill0 = document.getElementById('ctxDeudorPill');
     if(pill0) pill0.textContent = 'Sin datos';
@@ -4195,7 +4263,7 @@ function renderDeudorConcentration(){
   const book = rows.reduce((s,r) => s + masterMontoAnticipo(r, masterSchema), 0);
 
   const deudorPill = document.getElementById('ctxDeudorPill');
-  if(deudorPill) deudorPill.textContent = (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
+  if(deudorPill) deudorPill.textContent = concentrationSelectedPeriodLabel() + ' · ' + (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
 
   if(!items.length || book <= 0){
     meters.innerHTML = '<p class="insight-empty">Sin montos por deudor en el maestro.</p>';
