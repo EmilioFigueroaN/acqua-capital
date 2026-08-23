@@ -2100,7 +2100,18 @@ function labelMonthShort(ym){
 }
 
 function emptyMetrics(){
-  return {clientes_nuevos:0, clientes_activos:0, operaciones:0, monto_fin:0, cartera_vigente:0, dif_precio:0, comisiones:0, tasa_pond_num:0, tasa_pond_den:0};
+  return {
+    clientes_nuevos:0,
+    clientes_activos:0,
+    operaciones:0,
+    operaciones_anticipo:0,
+    monto_fin:0,
+    cartera_vigente:0,
+    dif_precio:0,
+    comisiones:0,
+    tasa_pond_num:0,
+    tasa_pond_den:0
+  };
 }
 
 /*
@@ -2349,7 +2360,10 @@ function buildData(masterRows, facturaRows, selectedYear){
     const carteraVigente = colMontoVigente ? toNum(r[colMontoVigente]) : 0;
 
     cell.operaciones += 1;
-    cell.monto_fin += monto;
+    if(monto > 0){
+      cell.monto_fin += monto;
+      cell.operaciones_anticipo += 1;
+    }
     cell.cartera_vigente += carteraVigente;
     cell.dif_precio += dif;
     cell.comisiones += comis;
@@ -2358,7 +2372,10 @@ function buildData(masterRows, facturaRows, selectedYear){
 
     const acc = summary.ejecutivos[e].accum;
     acc.operaciones += 1;
-    acc.monto_fin += monto;
+    if(monto > 0){
+      acc.monto_fin += monto;
+      acc.operaciones_anticipo += 1;
+    }
     acc.cartera_vigente += carteraVigente;
     acc.dif_precio += dif;
     acc.comisiones += comis;
@@ -2366,7 +2383,10 @@ function buildData(masterRows, facturaRows, selectedYear){
     acc.tasa_pond_den += montoBaseTasa;
 
     summary.total.months[ym].operaciones += 1;
-    summary.total.months[ym].monto_fin += monto;
+    if(monto > 0){
+      summary.total.months[ym].monto_fin += monto;
+      summary.total.months[ym].operaciones_anticipo += 1;
+    }
     summary.total.months[ym].cartera_vigente += carteraVigente;
     summary.total.months[ym].dif_precio += dif;
     summary.total.months[ym].comisiones += comis;
@@ -2374,7 +2394,10 @@ function buildData(masterRows, facturaRows, selectedYear){
     summary.total.months[ym].tasa_pond_den += montoBaseTasa;
 
     summary.total.accum.operaciones += 1;
-    summary.total.accum.monto_fin += monto;
+    if(monto > 0){
+      summary.total.accum.monto_fin += monto;
+      summary.total.accum.operaciones_anticipo += 1;
+    }
     summary.total.accum.cartera_vigente += carteraVigente;
     summary.total.accum.dif_precio += dif;
     summary.total.accum.comisiones += comis;
@@ -2418,10 +2441,10 @@ function buildData(masterRows, facturaRows, selectedYear){
   if(colInteres){
     notes.push('Se utilizó la columna "' + colInteres + '" como Diferencia de precio (interés).');
     notes.push('Período mensual: se usa (23) Colocado mes; si falta, se usa (47) Fecha creación.');
-    notes.push('Monto anticipo: se calcula por operación como (33) Monto a financiar − (10) Abono pyme.');
+    notes.push('Monto anticipo: se calcula por operación como (33) Monto a financiar − (10) Abono pyme; solo para este indicador y los cálculos que dependen de él se excluyen resultados ≤ 0 por corresponder a excedentes.');
     if(colMontoVigente) notes.push('Cartera vigente: se suma directamente desde (55) Monto vigente, respetando el período y ejecutivo seleccionados.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
-    notes.push('Clientes activos: Empresa solicitante distinta con (33) Monto a financiar mayor que $0; el período se determina con (47) Fecha creación.');
+    notes.push('Clientes activos: Empresa solicitante distinta con (33) Monto a financiar mayor que $0; este criterio es independiente del Monto anticipo y el período se determina con (47) Fecha creación.');
     if(colGastoOp) notes.push('Comisión: se usa (36) Gasto operación (sin IVA) por operación.');
     if(colTasaInteresMensual && schema.montoAFinanciar) notes.push('Tasa promedio ponderada: Σ[(40) Tasa interés mensual × (33) Monto a financiar] ÷ Σ[(33) Monto a financiar].');
   } else {
@@ -2958,6 +2981,7 @@ function sumMetrics(list){
     t.clientes_nuevos += c.clientes_nuevos || 0;
     t.clientes_activos += c.clientes_activos || 0;
     t.operaciones += c.operaciones || 0;
+    t.operaciones_anticipo += c.operaciones_anticipo || 0;
     t.monto_fin += c.monto_fin || 0;
     t.cartera_vigente += c.cartera_vigente || 0;
     t.dif_precio += c.dif_precio || 0;
@@ -3064,7 +3088,11 @@ function metricsForMonthRaw(ym){
     }
 
     t.operaciones += 1;
-    t.monto_fin += masterMontoAnticipo(r, schema);
+    const montoAnticipo = masterMontoAnticipo(r, schema);
+    if(montoAnticipo > 0){
+      t.monto_fin += montoAnticipo;
+      t.operaciones_anticipo += 1;
+    }
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
@@ -3125,7 +3153,11 @@ function metricsForYear(year){
     }
 
     t.operaciones += 1;
-    t.monto_fin += masterMontoAnticipo(r, schema);
+    const montoAnticipo = masterMontoAnticipo(r, schema);
+    if(montoAnticipo > 0){
+      t.monto_fin += montoAnticipo;
+      t.operaciones_anticipo += 1;
+    }
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
@@ -3198,7 +3230,11 @@ function metricsForDateRange(fromStr, toStr){
     }
 
     t.operaciones += 1;
-    t.monto_fin += masterMontoAnticipo(r, schema);
+    const montoAnticipo = masterMontoAnticipo(r, schema);
+    if(montoAnticipo > 0){
+      t.monto_fin += montoAnticipo;
+      t.operaciones_anticipo += 1;
+    }
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
@@ -3247,6 +3283,7 @@ function yearAverageMetrics(year){
       sums.clientes_nuevos += m.clientes_nuevos;
       sums.clientes_activos += m.clientes_activos;
       sums.operaciones += m.operaciones;
+      sums.operaciones_anticipo += m.operaciones_anticipo || 0;
       sums.monto_fin += m.monto_fin;
       sums.cartera_vigente += m.cartera_vigente;
       sums.dif_precio += m.dif_precio;
@@ -3261,6 +3298,7 @@ function yearAverageMetrics(year){
     clientes_nuevos: sums.clientes_nuevos / n,
     clientes_activos: sums.clientes_activos / n,
     operaciones: sums.operaciones / n,
+    operaciones_anticipo: sums.operaciones_anticipo / n,
     monto_fin: sums.monto_fin / n,
     cartera_vigente: sums.cartera_vigente / n,
     dif_precio: sums.dif_precio / n,
@@ -3478,8 +3516,8 @@ function renderKpis(){
     tagText = labelMonth(curYm) + ' · ' + baseLabel;
   }
 
-  const ticketCur = cur.operaciones ? cur.monto_fin / cur.operaciones : 0;
-  const ticketPrev = prev.operaciones ? prev.monto_fin / prev.operaciones : 0;
+  const ticketCur = cur.operaciones_anticipo ? cur.monto_fin / cur.operaciones_anticipo : 0;
+  const ticketPrev = prev.operaciones_anticipo ? prev.monto_fin / prev.operaciones_anticipo : 0;
   const tasaPondCur = cur.tasa_pond_den ? cur.tasa_pond_num / cur.tasa_pond_den : 0;
   const tasaPondPrev = prev.tasa_pond_den ? prev.tasa_pond_num / prev.tasa_pond_den : 0;
   const fmtPct2 = n => (Number(n)||0).toFixed(2).replace('.', ',') + '%';
