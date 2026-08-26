@@ -1321,7 +1321,7 @@ select#execFilter:focus-visible{
         <p class="intel-sub"><b>Cliente (cedente):</b> empresa a la que Acqua anticipa el pago de sus facturas. El gráfico ordena a los principales clientes por participación en el monto total anticipado del período seleccionado arriba. Una participación igual o superior al <b>25%</b> se considera concentración elevada. Bajo cada barra se detalla la participación por ejecutivo; al expandir un cliente se muestra su top 5 de deudores.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxConcPill">—</span>
-          <span class="ctx-text" id="ctxConcText">Fuente: operaciones del maestro acumuladas. Usa Monto anticipo = (33) − (10), excluyendo montos ≤ 0. Respeta el filtro de ejecutivo seleccionado.</span>
+          <span class="ctx-text" id="ctxConcText">Fuente: operaciones del maestro acumuladas. Respeta el filtro de ejecutivo seleccionado.</span>
         </div>
         <div class="conc-meters" id="concMeters"></div>
         <div class="conc-summary" id="concSummary"></div>
@@ -1332,7 +1332,7 @@ select#execFilter:focus-visible{
         <p class="intel-sub"><b>Deudor:</b> empresa obligada al pago de la factura. El gráfico usa (28) Empresa deudora y muestra qué proporción de la cartera operativa acumulada depende de cada pagador. Concentraciones altas en un solo deudor aumentan el riesgo de cobranza.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxDeudorPill">—</span>
-          <span class="ctx-text" id="ctxDeudorText">Fuente: operaciones del maestro acumuladas. Usa Monto anticipo = (33) − (10), excluyendo montos ≤ 0. Respeta el filtro de ejecutivo seleccionado.</span>
+          <span class="ctx-text" id="ctxDeudorText">Fuente: operaciones del maestro acumuladas. Respeta el filtro de ejecutivo seleccionado.</span>
         </div>
         <div class="conc-meters" id="deudorMeters"></div>
         <div class="conc-summary" id="deudorSummary"></div>
@@ -1373,7 +1373,7 @@ select#execFilter:focus-visible{
 
 <section class="block" id="secMora">
     <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Aging de mora</h2></div>
-    <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente:</b> facturas sin mora. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. <b>Monto</b> corresponde al <b>Monto anticipo</b> = (33) Monto a financiar − (10) Abono pyme, <b>% de la cartera</b> es la participación de cada tramo sobre la cartera total e <b>Interés mora</b> corresponde a (68) Interes Mora × Monto anticipo.</p>
+    <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente:</b> facturas sin mora. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. <b>Monto</b> corresponde a (55) Monto vigente, <b>% de la cartera</b> es la participación de cada tramo sobre la cartera total e <b>Interés mora</b> corresponde a (68) Interes Mora × Monto vigente.</p>
     <div class="ctx-bar" id="ctxMora">
       <span class="ctx-pill" id="ctxMoraPill">—</span>
       <span class="ctx-text" id="ctxMoraText">Fuente: (19) Días de mora, (33) Monto a financiar, (10) Abono pyme y (68) Interes Mora. El monto de mora usa Monto anticipo = (33) − (10); si ese monto es menor o igual a 0, la fila se excluye. El interés mora se calcula como (68) × Monto anticipo. Respeta el filtro de ejecutivo.</span>
@@ -2441,8 +2441,8 @@ function buildData(masterRows, facturaRows, selectedYear){
   if(colInteres){
     notes.push('Se utilizó la columna "' + colInteres + '" como Diferencia de precio (interés).');
     notes.push('Período mensual: se usa (23) Colocado mes; si falta, se usa (47) Fecha creación.');
-    notes.push('Monto anticipo: se calcula por operación como (33) Monto a financiar − (10) Abono pyme; solo para este indicador y los cálculos que dependen de él se excluyen resultados ≤ 0 por corresponder a excedentes.');
-    if(colMontoVigente) notes.push('Cartera vigente: se suma directamente desde (55) Monto vigente, respetando el período y ejecutivo seleccionados.');
+    notes.push('Monto anticipo (KPI): corresponde directamente a la suma de (33) Monto a financiar.');
+    if(colMontoVigente) notes.push('Cartera vigente: suma directa de (55) Monto vigente, respetando el período y ejecutivo seleccionados.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
     notes.push('Clientes activos: Empresa solicitante distinta con (33) Monto a financiar mayor que $0; este criterio es independiente del Monto anticipo y el período se determina con (47) Fecha creación.');
     if(colGastoOp) notes.push('Comisión: se usa (36) Gasto operación (sin IVA) por operación.');
@@ -3034,30 +3034,14 @@ function isNewClientRow(r, schema, firstMap){
 }
 
 function metricsForMonth(ym){
-  if(!DATA || !ym) return emptyMetrics();
-  const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
-  const cells = execs.map(e => {
-    const ed = DATA.summary.ejecutivos[e];
-    // months outside selected year may not exist in summary — compute from raw if needed
-    if(ed && ed.months[ym]) return ed.months[ym];
-    return emptyMetrics();
-  });
-  const result = sumMetrics(cells);
-  // Para "Todos", clientes activos debe ser el número de clientes únicos del mes,
-  // no la suma de ejecutivos (un cliente podría aparecer con más de uno).
-  if(currentExec === 'ALL' && DATA.summary.total && DATA.summary.total.months[ym]){
-    result.clientes_activos = DATA.summary.total.months[ym].clientes_activos || 0;
-  }
-  return result;
+  // Los KPI se recalculan directamente desde el maestro para que
+  // "Monto anticipo" use exclusivamente (33) Monto a financiar.
+  return metricsForMonthRaw(ym);
 }
 
 /** Métricas de un mes aunque no esté en DATA.months (otros años). Usa cache CSV. */
 function metricsForMonthRaw(ym){
-  if(!ym || !masterRowsCache.length) return metricsForMonth(ym);
-  // Si el mes pertenece al año cargado en DATA, usar summary (respetando filtro)
-  if(DATA && DATA.months && DATA.months.indexOf(ym) !== -1){
-    return metricsForMonth(ym);
-  }
+  if(!ym || !masterRowsCache.length) return emptyMetrics();
 
   const schema = resolveMasterSchema(masterRowsCache);
   const firstMap = buildClientFirstOpMap();
@@ -3088,11 +3072,13 @@ function metricsForMonthRaw(ym){
     }
 
     t.operaciones += 1;
-    const montoAnticipo = masterMontoAnticipo(r, schema);
-    if(montoAnticipo > 0){
-      t.monto_fin += montoAnticipo;
-      t.operaciones_anticipo += 1;
-    }
+
+    // KPI "Monto anticipo": suma directa de (33) Monto a financiar.
+    // No se resta (10) Abono pyme en esta sección.
+    const montoKpi = schema.montoAFinanciar ? toNum(r[schema.montoAFinanciar]) : 0;
+    t.monto_fin += montoKpi;
+    t.operaciones_anticipo += 1;
+
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
@@ -3153,11 +3139,13 @@ function metricsForYear(year){
     }
 
     t.operaciones += 1;
-    const montoAnticipo = masterMontoAnticipo(r, schema);
-    if(montoAnticipo > 0){
-      t.monto_fin += montoAnticipo;
-      t.operaciones_anticipo += 1;
-    }
+
+    // KPI "Monto anticipo": suma directa de (33) Monto a financiar.
+    // No se resta (10) Abono pyme en esta sección.
+    const montoKpi = schema.montoAFinanciar ? toNum(r[schema.montoAFinanciar]) : 0;
+    t.monto_fin += montoKpi;
+    t.operaciones_anticipo += 1;
+
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
@@ -3230,11 +3218,13 @@ function metricsForDateRange(fromStr, toStr){
     }
 
     t.operaciones += 1;
-    const montoAnticipo = masterMontoAnticipo(r, schema);
-    if(montoAnticipo > 0){
-      t.monto_fin += montoAnticipo;
-      t.operaciones_anticipo += 1;
-    }
+
+    // KPI "Monto anticipo": suma directa de (33) Monto a financiar.
+    // No se resta (10) Abono pyme en esta sección.
+    const montoKpi = schema.montoAFinanciar ? toNum(r[schema.montoAFinanciar]) : 0;
+    t.monto_fin += montoKpi;
+    t.operaciones_anticipo += 1;
+
     t.cartera_vigente += schema.montoVigente ? toNum(r[schema.montoVigente]) : 0;
     t.dif_precio += schema.interes ? toNum(r[schema.interes]) : 0;
     t.comisiones += schema.gastoOperacion ? toNum(r[schema.gastoOperacion]) : 0;
@@ -3516,8 +3506,8 @@ function renderKpis(){
     tagText = labelMonth(curYm) + ' · ' + baseLabel;
   }
 
-  const ticketCur = cur.operaciones_anticipo ? cur.monto_fin / cur.operaciones_anticipo : 0;
-  const ticketPrev = prev.operaciones_anticipo ? prev.monto_fin / prev.operaciones_anticipo : 0;
+  const ticketCur = cur.operaciones ? cur.monto_fin / cur.operaciones : 0;
+  const ticketPrev = prev.operaciones ? prev.monto_fin / prev.operaciones : 0;
   const tasaPondCur = cur.tasa_pond_den ? cur.tasa_pond_num / cur.tasa_pond_den : 0;
   const tasaPondPrev = prev.tasa_pond_den ? prev.tasa_pond_num / prev.tasa_pond_den : 0;
   const fmtPct2 = n => (Number(n)||0).toFixed(2).replace('.', ',') + '%';
@@ -3916,10 +3906,10 @@ function renderMora(){
     return;
   }
 
-  const sample = masterRowsCache[0] || {};
-  const keys = Object.keys(sample);
-  const colDias = keys.find(k => /d[ií]as\s*de\s*mora/i.test(k) || /\(19\)/.test(k));
   const masterSchema = resolveMasterSchema(masterRowsCache);
+
+  // Días de mora: usar EXCLUSIVAMENTE la columna (19).
+  const colDias = masterSchema.diasMora;
 
   if(!colDias){
     tiles.innerHTML = '<p class="insight-empty" style="grid-column:1/-1">No se encontró la columna (19) Días de mora en el maestro.</p>';
@@ -3939,31 +3929,25 @@ function renderMora(){
 
   const moraSource = masterRowsFiltered();
   moraSource.forEach(r => {
-    let dias = parseInt(String(r[colDias] || '').replace(/[^\d\-]/g,''), 10);
+    const rawDias = r[colDias];
+    let dias = parseInt(String(rawDias == null ? '' : rawDias).replace(/[^\d\-]/g,''), 10);
     if(isNaN(dias)) return;
 
-    // Monto base de mora: Monto anticipo = (33) Monto a financiar - (10) Abono pyme.
-    const monto = masterMontoAnticipo(r, masterSchema);
+    // Monto de mora: (55) Monto vigente.
+    const monto = masterSchema.montoVigente ? toNum(r[masterSchema.montoVigente]) : 0;
 
     // Si el monto es menor o igual a 0, se excluye del análisis de mora.
-    // No corresponde a cartera efectivamente vigente ni en mora para esta vista.
     if(monto <= 0) return;
 
-    // Monto de interés de mora:
-    // (68) Interes Mora × Monto anticipo.
+    // Interés mora: (68) × (55).
     const rawInteresMora = masterSchema.interesMora ? r[masterSchema.interesMora] : 0;
     let tasaInteresMora = toNum(rawInteresMora);
-
-    // Si la celda viene explícitamente formateada como porcentaje (ej. "1,5%"),
-    // convertirla a decimal antes de multiplicar.
     if(String(rawInteresMora ?? '').includes('%')){
       tasaInteresMora = tasaInteresMora / 100;
     }
-
     const interesMora = tasaInteresMora * monto;
 
     let b;
-    // Días de mora negativos o iguales a 0 no son mora: se consideran Vigente.
     if(dias <= 0) b = buckets.vigente;
     else if(dias <= 15) b = buckets.m015;
     else if(dias <= 30) b = buckets.m1530;
@@ -3974,25 +3958,21 @@ function renderMora(){
     b.monto += monto;
     b.interesMora += interesMora;
 
-    // Desplegable por DEUDOR dentro del tramo.
-    // Nombre: (28) Empresa deudora.
-    // Monto mostrado: Monto anticipo = (33) - (10).
+    // Deudor: usar siempre (28) Empresa deudora.
     const deudor = masterSchema.deudor
       ? (String(r[masterSchema.deudor] || '').trim() || 'Sin deudor')
       : 'Sin deudor';
-    const montoAnticipoDeudor = masterMontoAnticipo(r, masterSchema);
 
     if(!b.empresas[deudor]){
       b.empresas[deudor] = { monto:0, interesMora:0, facturas:0 };
     }
-    b.empresas[deudor].monto += montoAnticipoDeudor;
+    b.empresas[deudor].monto += monto;
     b.empresas[deudor].interesMora += interesMora;
     b.empresas[deudor].facturas += 1;
   });
 
   const orderAll = ['vigente','m015','m1530','m2','m3'];
 
-  // "Cartera completa" = suma de (33) Monto a financiar de todos los tramos.
   const totalCartera = orderAll.reduce((s,k) => s + buckets[k].monto, 0);
   const totalFacturas = orderAll.reduce((s,k) => s + buckets[k].facturas, 0);
   const totalInteresMora = orderAll.reduce((s,k) => s + buckets[k].interesMora, 0);
@@ -4011,7 +3991,6 @@ function renderMora(){
     pill.textContent = fl + ' · ' + totalFacturas + ' facturas · Cartera ' + fmtCLP(totalCartera);
   }
 
-  // Cuadro celeste: todos los valores usan la misma base de cartera.
   if(banner){
     banner.innerHTML = `
       <div class="mp-main">
@@ -4037,6 +4016,7 @@ function renderMora(){
     const b = buckets[k];
     const pct = totalCartera > 0 ? (b.monto / totalCartera * 100) : 0;
 
+    // Mostrar TODOS los deudores visibles del tramo, sin topes.
     const empresas = Object.entries(b.empresas || {})
       .map(([nombre, x]) => ({
         nombre,
@@ -4048,7 +4028,7 @@ function renderMora(){
 
     const companyHtml = empresas.length
       ? `<ul class="mora-company-list">${empresas.map((e,i) => `
-          <li title="${escapeHtml(e.nombre)} · ${e.facturas} factura(s) · Monto anticipo ${fmtCLP(e.monto)} · Interés mora ${fmtCLP(e.interesMora)}">
+          <li title="${escapeHtml(e.nombre)} · ${e.facturas} factura(s) · Monto vigente ${fmtCLP(e.monto)} · Interés mora ${fmtCLP(e.interesMora)}">
             <span class="mc-name">${i+1}. ${escapeHtml(e.nombre)}</span>
             <span class="mc-amount">${fmtCLP(e.monto)}</span>
           </li>`).join('')}</ul>`
@@ -4057,7 +4037,7 @@ function renderMora(){
     return `<div class="mora-tile ${b.cls}">
       <div class="mt-label">${b.label}</div>
       <div class="mt-monto">${fmtCLP(b.monto)}</div>
-      <div class="mt-meta">${b.facturas} facturas · ${pct.toFixed(1).replace('.',',')}% de la cartera</div>
+      <div class="mt-meta">${b.facturas} facturas · ${pct.toFixed(1).replace('.',',')}% de la cartera · ${empresas.length} deudores</div>
       <div class="mora-bar-wrap"><div class="mora-track"><div class="mora-fill ${b.cls}" style="width:${Math.min(Math.max(pct,0),100)}%"></div></div></div>
       <details class="mora-drop">
         <summary>Ver deudores (${empresas.length})</summary>
