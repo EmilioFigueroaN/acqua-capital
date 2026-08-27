@@ -1304,10 +1304,10 @@ select#execFilter:focus-visible{
     <div class="intel-grid">
       <div class="intel-card">
         <h3>Concentración por cliente (cedente)</h3>
-        <p class="intel-sub"><b>Cliente (cedente):</b> empresa a la que Acqua anticipa el pago de sus facturas. El gráfico ordena a los principales clientes por participación en el monto total anticipado del período seleccionado arriba. Una participación igual o superior al <b>25%</b> se considera concentración elevada. Bajo cada barra se detalla la participación por ejecutivo; al expandir un cliente se muestra su top 5 de deudores.</p>
+        <p class="intel-sub"><b>Cliente (cedente):</b> empresa a la que Acqua anticipa el pago de sus facturas. El gráfico ordena a los principales clientes por participación en la cartera vigente acumulada. Una participación igual o superior al <b>25%</b> se considera concentración elevada. Bajo cada barra se detalla la participación por ejecutivo; al expandir un cliente se muestra su top 5 de deudores.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxConcPill">—</span>
-          <span class="ctx-text" id="ctxConcText">Fuente: operaciones del maestro acumuladas. Respeta el filtro de ejecutivo seleccionado.</span>
+          <span class="ctx-text" id="ctxConcText">Fuente: operaciones del maestro acumuladas sobre (55) Monto vigente. Respeta el filtro de ejecutivo seleccionado.</span>
         </div>
         <div class="conc-meters" id="concMeters"></div>
         <div class="conc-summary" id="concSummary"></div>
@@ -1315,10 +1315,10 @@ select#execFilter:focus-visible{
       </div>
       <div class="intel-card">
         <h3>Concentración por deudor (quien paga)</h3>
-        <p class="intel-sub"><b>Deudor:</b> empresa obligada al pago de la factura. El gráfico usa (28) Empresa deudora y muestra qué proporción de la cartera operativa acumulada depende de cada pagador. Concentraciones altas en un solo deudor aumentan el riesgo de cobranza.</p>
+        <p class="intel-sub"><b>Deudor:</b> empresa obligada al pago de la factura. El gráfico usa (28) Empresa deudora y muestra qué proporción de la cartera vigente acumulada depende de cada pagador. Concentraciones altas en un solo deudor aumentan el riesgo de cobranza.</p>
         <div class="ctx-bar" style="margin:0 0 12px 0; padding:8px 12px;">
           <span class="ctx-pill" id="ctxDeudorPill">—</span>
-          <span class="ctx-text" id="ctxDeudorText">Fuente: operaciones del maestro acumuladas. Respeta el filtro de ejecutivo seleccionado.</span>
+          <span class="ctx-text" id="ctxDeudorText">Fuente: operaciones del maestro acumuladas sobre (55) Monto vigente. Respeta el filtro de ejecutivo seleccionado.</span>
         </div>
         <div class="conc-meters" id="deudorMeters"></div>
         <div class="conc-summary" id="deudorSummary"></div>
@@ -3593,14 +3593,22 @@ function updateContextBars(){
  * Concentraciones ACUMULADAS:
  * - usan todas las filas visibles del maestro según ejecutivo
  * - NO se filtran por mes/año/semana/día
- * - usan la misma base de Mora: Monto anticipo = (33) - (10)
- * - excluyen filas con monto <= 0
+ * - usan la misma base que Mora: (55) Monto vigente
+ * - excluyen (55) <= 0
+ * - para cuadrar exactamente con Mora, solo incluyen filas con (19) Días de mora válido
  */
 function concentrationRowsForSelectedPeriod(){
   const rows = (typeof masterRowsFiltered === 'function') ? masterRowsFiltered() : (masterRowsCache || []);
   if(!rows.length) return [];
+
   const schema = resolveMasterSchema(rows);
-  return rows.filter(r => masterMontoAnticipo(r, schema) > 0);
+  if(!schema.montoVigente || !schema.diasMora) return [];
+
+  return rows.filter(r => {
+    const monto = toNum(r[schema.montoVigente]);
+    const dias = parseInt(String(r[schema.diasMora] ?? '').replace(/[^\d\-]/g,''), 10);
+    return monto > 0 && !isNaN(dias);
+  });
 }
 
 function concentrationSelectedPeriodLabel(){
@@ -3631,7 +3639,7 @@ function renderConcentration(){
     const cli = ((r[colCli] || 'Sin nombre') + '').trim() || 'Sin nombre';
     const deu = ((r[colDeu] || 'Sin deudor') + '').trim() || 'Sin deudor';
     const exec = ((r[colExec] || 'Sin ejecutivo') + '').trim() || 'Sin ejecutivo';
-    const monto = masterMontoAnticipo(r, masterSchema);
+    const monto = masterSchema.montoVigente ? toNum(r[masterSchema.montoVigente]) : 0;
     if(!by[cli]) by[cli] = { total:0, deudores:{}, ejecutivos:{} };
     by[cli].total += monto;
     if(!by[cli].deudores[deu]) by[cli].deudores[deu] = 0;
@@ -3654,13 +3662,10 @@ function renderConcentration(){
   })).filter(x => x.total > 0);
   items.sort((a,b) => b.total - a.total);
 
-  // Base única de concentración: suma fila a fila del monto anticipo,
-  // exactamente (33) Monto a financiar - (10) Abono pyme.
-  // No se recalcula desde los grupos positivos, para que cliente y deudor
-  // compartan siempre el mismo total de cartera operativa.
-  const book = rows.reduce((s,r) => s + masterMontoAnticipo(r, masterSchema), 0);
+  // Misma base de Mora: suma de (55) Monto vigente sobre las mismas filas elegibles.
+  const book = rows.reduce((s,r) => s + (masterSchema.montoVigente ? toNum(r[masterSchema.montoVigente]) : 0), 0);
 
-  if(pill) pill.textContent = concentrationSelectedPeriodLabel() + ' · ' + (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
+  if(pill) pill.textContent = concentrationSelectedPeriodLabel() + ' · ' + (currentExec === 'ALL' ? 'Cartera vigente' : currentExec) + ' · ' + fmtCLP(book);
 
   if(!items.length || book <= 0){
     meters.innerHTML = '<p class="insight-empty">No hay montos de clientes disponibles en el maestro.</p>';
@@ -4215,7 +4220,7 @@ function renderDeudorConcentration(){
   const byD = {};
   rows.forEach(r => {
     const name = ((r[colName] || 'Sin deudor') + '').trim() || 'Sin deudor';
-    const monto = masterMontoAnticipo(r, masterSchema);
+    const monto = masterSchema.montoVigente ? toNum(r[masterSchema.montoVigente]) : 0;
     if(!byD[name]) byD[name] = 0;
     byD[name] += monto;
   });
@@ -4223,12 +4228,11 @@ function renderDeudorConcentration(){
   const items = Object.keys(byD).map(n => ({ nombre: n, total: byD[n] })).filter(x => x.total > 0);
   items.sort((a,b) => b.total - a.total);
 
-  // Misma base usada en concentración por cliente:
-  // suma fila a fila de (33) Monto a financiar - (10) Abono pyme.
-  const book = rows.reduce((s,r) => s + masterMontoAnticipo(r, masterSchema), 0);
+  // Misma base usada en Mora y concentración por cliente: (55) Monto vigente.
+  const book = rows.reduce((s,r) => s + (masterSchema.montoVigente ? toNum(r[masterSchema.montoVigente]) : 0), 0);
 
   const deudorPill = document.getElementById('ctxDeudorPill');
-  if(deudorPill) deudorPill.textContent = concentrationSelectedPeriodLabel() + ' · ' + (currentExec === 'ALL' ? 'Cartera operativa' : currentExec) + ' · ' + fmtCLP(book);
+  if(deudorPill) deudorPill.textContent = concentrationSelectedPeriodLabel() + ' · ' + (currentExec === 'ALL' ? 'Cartera vigente' : currentExec) + ' · ' + fmtCLP(book);
 
   if(!items.length || book <= 0){
     meters.innerHTML = '<p class="insight-empty">Sin montos por deudor en el maestro.</p>';
