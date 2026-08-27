@@ -2418,7 +2418,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('Diferencia de precio: se usa "' + colInteres + '" y se suma el campo monetario Intereses de Mora cuando esté disponible.');
     notes.push('Período mensual: se usa (23) Colocado mes; si falta, se usa (47) Fecha creación.');
     notes.push('Monto anticipo (KPI): corresponde directamente a la suma de (33) Monto a financiar.');
-    if(colMontoVigente) notes.push('Cartera vigente: suma directa de todas las filas de (55) Monto vigente. Se incluyen valores positivos, cero y negativos, sin aplicar filtros de período ni ejecutivo.');
+    if(colMontoVigente) notes.push('Cartera vigente: suma directa de (55) Monto vigente para el período y ejecutivo seleccionados. Se incluyen valores positivos, cero y negativos, sin excepciones.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
     notes.push('Clientes activos: Empresa solicitante distinta con (33) Monto a financiar mayor que $0; este criterio es independiente del Monto anticipo y el período se determina con (47) Fecha creación.');
     if(colGastoOp) notes.push('Comisiones (KPI): (36) Gasto operación (sin IVA) + (60) Gasto legal Comisión RC (sin IVA), sin usar otras columnas como reemplazo.');
@@ -3429,20 +3429,6 @@ function setupKpiControls(){
   }
 }
 
-function kpiCarteraVigenteTotal(){
-  const rows = masterRowsCache || [];
-  if(!rows.length) return 0;
-
-  const schema = resolveMasterSchema(rows);
-  if(!schema.montoVigente) return 0;
-
-  // KPI Cartera vigente:
-  // suma TODAS las filas de (55) Monto vigente, sin excepciones.
-  // Se incluyen valores positivos, cero y negativos.
-  // No aplica filtros de período ni ejecutivo.
-  return rows.reduce((sum, r) => sum + toNum(r[schema.montoVigente]), 0);
-}
-
 function renderKpis(){
   const el = document.getElementById('kpiGrid');
   if(!el || !DATA) return;
@@ -3516,8 +3502,6 @@ function renderKpis(){
   const tag = document.getElementById('kpiPeriodTag');
   if(tag) tag.textContent = tagText;
 
-  const carteraVigenteTotal = kpiCarteraVigenteTotal();
-
   const items = [
     {
       tone: '', label: 'Clientes activos',
@@ -3533,16 +3517,17 @@ function renderKpis(){
     },
     {
       tone: '', label: 'Cartera vigente',
-      value: fmtCLP(carteraVigenteTotal),
-      delta: { cls:'flat', arrow:'•', text:'total' },
-      sub: 'suma completa de (55)'
+      value: fmtCLP(cur.cartera_vigente || 0),
+      delta: pctDelta(cur.cartera_vigente || 0, prev.cartera_vigente || 0),
+      sub: baseLabel
     },
     {
       tone: 'gold', label: 'Intereses de mora',
-      // Campo aún no incorporado al maestro: valor temporal en cero.
+      // Campo aún no incorporado al maestro: por ahora cur y prev son 0.
+      // Se conserva la misma lógica visual de filtros y comparación de los demás KPI.
       value: fmtCLP(0),
-      delta: { cls:'flat', arrow:'•', text:'0,0%' },
-      sub: 'pendiente de incorporar campo'
+      delta: pctDelta(0, 0),
+      sub: baseLabel
     },
     {
       tone: '', label: 'Clientes nuevos',
