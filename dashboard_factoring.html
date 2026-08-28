@@ -1829,7 +1829,7 @@ let usersLoaded = false;
 let usersLoadError = null;
 
 const SESSION_KEY = 'acqua_factoring_session_v1';
-let SESSION = null; // { nombre, rut, rol, ejecutivoKey? }
+let SESSION = null; // { nombre, rut, rol, ejecutivoKey?, estado? }
 
 function normalizeRut(r){
   return String(r || '').replace(/\./g,'').replace(/\s/g,'').toUpperCase();
@@ -1850,11 +1850,24 @@ async function loadUsers(){
       const nombre = (r.nombre || r.Nombre || '').trim();
       const rut = (r.rut || r.RUT || r.Rut || '').trim();
       const rol = (r.rol || r.Rol || '').trim().toLowerCase();
+      const estadoRaw = (r.estado || r.Estado || r.ESTADO || '').trim().toLowerCase();
+      const estado = estadoRaw || 'activo';
+
       let ejecutivoKey = (r.ejecutivoKey || r.ejecutivo_key || r['ejecutivo key'] || r.EjecutivoKey || '').trim();
       if(!ejecutivoKey && rol === 'ejecutivo') ejecutivoKey = nombre;
+
+      // El estado NO elimina al usuario del catálogo ni borra sus registros.
+      // Solo controla si puede iniciar / mantener una sesión.
       if(rol !== 'ejecutivo' && rol !== 'gerente') return null;
       if(!nombre || !rut) return null;
-      return { nombre, rut, rol, ejecutivoKey: rol === 'ejecutivo' ? ejecutivoKey : null };
+
+      return {
+        nombre,
+        rut,
+        rol,
+        estado,
+        ejecutivoKey: rol === 'ejecutivo' ? ejecutivoKey : null
+      };
     }).filter(Boolean);
     usersLoaded = true;
     if(!USERS.length) usersLoadError = 'users.csv no tiene usuarios válidos.';
@@ -1864,6 +1877,11 @@ async function loadUsers(){
     USERS = [];
     console.error(err);
   }
+}
+
+function userIsActive(user){
+  if(!user) return false;
+  return String(user.estado || 'activo').trim().toLowerCase() !== 'inactivo';
 }
 
 function findUser(nombre, rut){
@@ -1877,6 +1895,7 @@ function saveSession(user){
     nombre: user.nombre,
     rut: user.rut,
     rol: user.rol,
+    estado: user.estado || 'activo',
     ejecutivoKey: user.ejecutivoKey || null
   };
   try{ sessionStorage.setItem(SESSION_KEY, JSON.stringify(SESSION)); }catch(e){}
@@ -2022,6 +2041,12 @@ async function attemptLogin(){
     showLogin('No encontramos esa combinación de nombre y RUT. Verifica o pide acceso a gerencia.');
     return;
   }
+
+  if(!userIsActive(user)){
+    showLogin('Este usuario está inactivo y no tiene acceso al dashboard. Sus registros históricos se mantienen.');
+    return;
+  }
+
   saveSession(user);
   showApp();
 }
@@ -3826,11 +3851,11 @@ function renderKpis(){
         </li>
       </ul>
 
-      <div class="enrolados-foot">${
+      ${
         reporteEmpresasLoadError && !enroladosDisponible
-          ? 'No se pudo cargar Reporte Empresas'
-          : 'Reporte Empresas · 36_estado_clave'
-      }</div>
+          ? '<div class="enrolados-foot">No se pudo cargar Reporte Empresas</div>'
+          : ''
+      }
     </aside>
   `;
 
@@ -6114,6 +6139,29 @@ async function checkCsvUpdates(silent){
       }
     } else if(changedUsers){
       if(typeof loadUsers === 'function') await loadUsers();
+
+      // Revalidar la sesión contra el estado actualizado.
+      if(SESSION){
+        const still = USERS.find(u =>
+          normalizeRut(u.rut) === normalizeRut(SESSION.rut) &&
+          normalizeName(u.nombre) === normalizeName(SESSION.nombre)
+        );
+
+        if(!still || !userIsActive(still)){
+          clearSession();
+          currentExec = 'ALL';
+          DATA = null;
+          showLogin(
+            still
+              ? 'Tu usuario fue marcado como inactivo. El acceso al dashboard fue deshabilitado; tus registros históricos se mantienen.'
+              : 'Tu usuario ya no tiene acceso al dashboard.'
+          );
+          return;
+        }
+
+        SESSION.estado = still.estado || 'activo';
+      }
+
       setStatus('Usuarios actualizados · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
     } else if(changedMetas){
       if(tMetas != null){
@@ -6269,12 +6317,24 @@ document.getElementById('loginNombre').addEventListener('keydown', e => { if(e.k
   if(s && s.nombre && s.rol){
     // revalidar que el usuario siga en el CSV
     const still = USERS.find(u => normalizeRut(u.rut) === normalizeRut(s.rut) && normalizeName(u.nombre) === normalizeName(s.nombre));
-    if(still){
-      SESSION = { nombre: still.nombre, rut: still.rut, rol: still.rol, ejecutivoKey: still.ejecutivoKey || null };
+    if(still && userIsActive(still)){
+      SESSION = {
+        nombre: still.nombre,
+        rut: still.rut,
+        rol: still.rol,
+        estado: still.estado || 'activo',
+        ejecutivoKey: still.ejecutivoKey || null
+      };
       showApp();
       return;
     }
+
     clearSession();
+
+    if(still && !userIsActive(still)){
+      showLogin('Este usuario está inactivo y no tiene acceso al dashboard. Sus registros históricos se mantienen.');
+      return;
+    }
   }
   showLogin('');
 })();
