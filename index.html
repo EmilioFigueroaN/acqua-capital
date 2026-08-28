@@ -2164,7 +2164,10 @@ function buildMetas(rows){
       clientes_nuevos:  Number(r['meta_clientes_nuevos']) || 0,
       operaciones:      Number(r['meta_operaciones']) || 0,
       monto_fin:        Number(r['meta_monto_anticipo']) || 0,
-      dif_precio:       Number(r['meta_dif_precio']) || 0
+      dif_precio:       Number(r['meta_dif_precio']) || 0,
+      comisiones:       (r['meta_comisiones'] !== undefined && String(r['meta_comisiones']).trim() !== '')
+                          ? Number(r['meta_comisiones'])
+                          : null
     };
   });
   return map;
@@ -2618,8 +2621,11 @@ function buildData(masterRows, facturaRows, selectedYear){
         summary.total.accum.clientes_nuevos += 1;
       }
     }
-    // KPI Comisiones = (36) Gasto operación (sin IVA) + (60) Gasto legal Comisión RC (sin IVA).
-    const comis = (colGastoOp ? toNum(r[colGastoOp]) : 0) + masterGastoLegalSinIva(r, schema);
+    // Comisiones = (36) Gasto operación (sin IVA) + (60) Gasto legal Comisión RC (sin IVA).
+    // Para Mes en curso y KPI se usan exclusivamente estas dos columnas.
+    const comis =
+      (colGastoOp ? toNum(r[colGastoOp]) : 0) +
+      (colLegalSinIva ? toNum(r[colLegalSinIva]) : 0);
     const carteraVigente = colMontoVigente ? toNum(r[colMontoVigente]) : 0;
 
     cell.operaciones += 1;
@@ -2892,47 +2898,41 @@ function renderResumen(){
 function renderMesCurso(){
   const m = DATA.generated_current_month;
   document.getElementById('mesCursoDesc').innerHTML =
-    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo: clientes activos (empresas distintas con (10) Abono pyme distinto de 0, fechadas por (47) Fecha creación), clientes nuevos, operaciones, monto anticipado y diferencia de precio, contra la meta del mes de cada ejecutivo.';
+    'Comparativo del mes <b>' + DATA.current_month_label + '</b> por ejecutivo, calculado con la misma lógica de los KPI: clientes activos, clientes nuevos, monto anticipo, diferencia de precio y comisiones ((36) + (60)).';
 
   const execs = currentExec === 'ALL' ? DATA.ejecutivos : [currentExec];
+
+  // Cada ejecutivo usa exactamente la misma función del KPI mensual.
   const rows = execs.map(e => {
-    const c = (DATA.summary.ejecutivos[e] && DATA.summary.ejecutivos[e].months[m]) || emptyMetrics();
+    const c = metricsForMonthRaw(m, e);
     return {exec:e, ...c};
   }).sort((a,b) => b.monto_fin - a.monto_fin);
 
-  const totals = emptyMetrics();
-  rows.forEach(r => {
-    totals.clientes_nuevos += r.clientes_nuevos || 0;
-    totals.clientes_activos += r.clientes_activos || 0;
-    totals.operaciones += r.operaciones || 0;
-    totals.monto_fin += r.monto_fin || 0;
-    totals.dif_precio += r.dif_precio || 0;
-  });
-  if(currentExec === 'ALL' && DATA.summary.total && DATA.summary.total.months[m]){
-    totals.clientes_activos = DATA.summary.total.months[m].clientes_activos || 0;
-  }
+  // El total general también se calcula como KPI "Todos los ejecutivos".
+  // Esto evita duplicar clientes que aparezcan asociados a más de un ejecutivo.
+  const totals = metricsForMonthRaw(m, currentExec === 'ALL' ? 'ALL' : currentExec);
 
   const metasMes = METAS_BY_MONTH[m] || null;
   const hayMetasMes = !!metasMes;
 
-  let html = '<thead><tr><th class="left">Ejecutivo</th><th>Clientes activos</th><th>Clientes nuevos</th><th>Operaciones</th><th>Monto anticipo</th><th>Diferencia precio</th></tr></thead><tbody>';
+  let html = '<thead><tr><th class="left">Ejecutivo</th><th>Clientes activos</th><th>Clientes nuevos</th><th>Monto anticipo</th><th>Diferencia precio</th><th>Comisiones</th></tr></thead><tbody>';
   rows.forEach(r => {
     const meta = metasMes ? metasMes[r.exec] : null;
     html += `<tr><td class="left">${escapeHtml(r.exec)}</td>`
       + `<td>${metaCellHtml(r.clientes_activos || 0, meta ? meta.clientes_activos : null, fmtInt)}</td>`
       + `<td>${metaCellHtml(r.clientes_nuevos || 0, meta ? meta.clientes_nuevos : null, fmtInt)}</td>`
-      + `<td>${metaCellHtml(r.operaciones || 0, meta ? meta.operaciones : null, fmtInt)}</td>`
       + `<td>${metaCellHtml(r.monto_fin || 0, meta ? meta.monto_fin : null, fmtCLP)}</td>`
-      + `<td>${metaCellHtml(r.dif_precio || 0, meta ? meta.dif_precio : null, fmtCLP)}</td></tr>`;
+      + `<td>${metaCellHtml(r.dif_precio || 0, meta ? meta.dif_precio : null, fmtCLP)}</td>`
+      + `<td>${metaCellHtml(r.comisiones || 0, meta ? meta.comisiones : null, fmtCLP)}</td></tr>`;
   });
 
   const metaTodos = metasMes ? metasMes['TODOS'] : null;
   html += `<tr class="total-row"><td class="left">Total general</td>`
     + `<td>${metaCellHtml(totals.clientes_activos, metaTodos ? metaTodos.clientes_activos : null, fmtInt)}</td>`
     + `<td>${metaCellHtml(totals.clientes_nuevos, metaTodos ? metaTodos.clientes_nuevos : null, fmtInt)}</td>`
-    + `<td>${metaCellHtml(totals.operaciones, metaTodos ? metaTodos.operaciones : null, fmtInt)}</td>`
     + `<td>${metaCellHtml(totals.monto_fin, metaTodos ? metaTodos.monto_fin : null, fmtCLP)}</td>`
-    + `<td>${metaCellHtml(totals.dif_precio, metaTodos ? metaTodos.dif_precio : null, fmtCLP)}</td></tr></tbody>`;
+    + `<td>${metaCellHtml(totals.dif_precio, metaTodos ? metaTodos.dif_precio : null, fmtCLP)}</td>`
+    + `<td>${metaCellHtml(totals.comisiones, metaTodos ? metaTodos.comisiones : null, fmtCLP)}</td></tr></tbody>`;
   document.getElementById('tbl-mescurso').innerHTML = html;
 
   const legendEl = document.getElementById('mescursoLegend');
@@ -3085,10 +3085,17 @@ function downloadMesCursoChartsCSV(){
   }).sort((a, b) => b.monto_fin - a.monto_fin);
 
   const out = [
-    ['Ejecutivo', 'Clientes activos', 'Clientes nuevos', 'Operaciones', 'Monto anticipo (CLP)', 'Diferencia precio (CLP)']
+    ['Ejecutivo', 'Clientes activos', 'Clientes nuevos', 'Monto anticipo (CLP)', 'Diferencia precio (CLP)', 'Comisiones (CLP)']
   ];
   rows.forEach(r => {
-    out.push([r.exec, Math.round(r.clientes_activos || 0), Math.round(r.clientes_nuevos || 0), r.operaciones || 0, Math.round(r.monto_fin || 0), Math.round(r.dif_precio || 0)]);
+    out.push([
+      r.exec,
+      Math.round(r.clientes_activos || 0),
+      Math.round(r.clientes_nuevos || 0),
+      Math.round(r.monto_fin || 0),
+      Math.round(r.dif_precio || 0),
+      Math.round(r.comisiones || 0)
+    ]);
   });
 
   const filterSuffix = currentExec === 'ALL' ? 'todos' : currentExec.replace(/\s+/g, '_');
@@ -3302,7 +3309,7 @@ function metricsForMonth(ym){
 }
 
 /** Métricas de un mes aunque no esté en DATA.months (otros años). Usa cache CSV. */
-function metricsForMonthRaw(ym){
+function metricsForMonthRaw(ym, execOverride = null){
   if(!ym || !masterRowsCache.length) return emptyMetrics();
 
   const schema = resolveMasterSchema(masterRowsCache);
@@ -3311,9 +3318,14 @@ function metricsForMonthRaw(ym){
   const seen = {};
   const seenActive = {};
 
+  // Por defecto usa el filtro general del dashboard.
+  // Mes en curso puede pasar un ejecutivo específico para reutilizar
+  // EXACTAMENTE la misma lógica de cálculo de los KPI.
+  const execFiltro = execOverride === null ? currentExec : execOverride;
+
   masterRowsCache.forEach(r => {
     const e = r[schema.exec] || '';
-    if(currentExec !== 'ALL' && e !== currentExec) return;
+    if(execFiltro !== 'ALL' && e !== execFiltro) return;
 
     const cli = String(r[schema.cliente] || '').trim();
 
