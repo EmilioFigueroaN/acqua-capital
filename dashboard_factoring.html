@@ -2498,7 +2498,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('Diferencia de precio: se usa "' + colInteres + '" y se suma el campo monetario Intereses de Mora cuando esté disponible.');
     notes.push('Período mensual: se usa (23) Colocado mes; si falta, se usa (47) Fecha creación.');
     notes.push('Monto anticipo (KPI): corresponde directamente a la suma de (33) Monto a financiar.');
-    if(colMontoVigente) notes.push('Cartera vigente destacada: acumulado de (55) Monto vigente hasta el período seleccionado, respetando el ejecutivo. Se incluyen valores positivos, cero y negativos, sin excepciones.');
+    if(colMontoVigente) notes.push('Cartera vigente destacada: acumulado total de (55) Monto vigente para el ejecutivo seleccionado. No depende de mes, año, semana, día ni comparación. Se incluyen valores positivos, cero y negativos.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
     notes.push('Clientes activos: Empresa solicitante distinta con (33) Monto a financiar mayor que $0; este criterio es independiente del Monto anticipo y el período se determina con (47) Fecha creación.');
     if(colGastoOp) notes.push('Comisiones (KPI): (36) Gasto operación (sin IVA) + (60) Gasto legal Comisión RC (sin IVA), sin usar otras columnas como reemplazo.');
@@ -3509,24 +3509,26 @@ function setupKpiControls(){
   }
 }
 
-function carteraVigenteAcumuladaHastaMes(year, month){
-  const y = Number(year);
-  const m = Number(month);
-  if(!Number.isFinite(y) || !Number.isFinite(m)) return 0;
+function carteraVigenteTotalConstante(){
+  const rows = masterRowsCache || [];
+  if(!rows.length) return 0;
 
-  let total = 0;
-  for(let mo = 1; mo <= m; mo++){
-    const ym = y + '-' + String(mo).padStart(2,'0');
-    total += metricsForMonthRaw(ym).cartera_vigente || 0;
-  }
-  return total;
-}
+  const schema = resolveMasterSchema(rows);
+  if(!schema.montoVigente) return 0;
 
-function carteraVigenteAcumuladaRangoHasta(endISO){
-  const end = parseFullDate(endISO);
-  if(!end) return 0;
-  const startISO = end.getFullYear() + '-01-01';
-  return metricsForDateRange(startISO, toISODate(end)).cartera_vigente || 0;
+  const execSeleccionado = String(currentExec || 'ALL').trim();
+
+  // Cartera vigente = acumulado TOTAL de (55) para el ejecutivo seleccionado.
+  // Sí responde al filtro de ejecutivo.
+  // NO responde a mes, año, semana, día ni comparación.
+  // Incluye valores positivos, cero y negativos.
+  return rows.reduce((total, r) => {
+    if(execSeleccionado !== 'ALL'){
+      const execFila = schema.exec ? String(r[schema.exec] || '').trim() : '';
+      if(execFila !== execSeleccionado) return total;
+    }
+    return total + toNum(r[schema.montoVigente]);
+  }, 0);
 }
 
 function renderKpis(){
@@ -3603,61 +3605,9 @@ function renderKpis(){
   const tag = document.getElementById('kpiPeriodTag');
   if(tag) tag.textContent = tagText;
 
-  // Cartera vigente destacada = ACUMULADO hasta el período seleccionado.
-  // Siempre suma directamente (55) Monto vigente, incluyendo positivos, ceros y negativos.
-  // Mantiene el filtro de ejecutivo y una comparación acumulada equivalente.
-  let carteraAcumCur = cur.cartera_vigente || 0;
-  let carteraAcumPrev = prev.cartera_vigente || 0;
-  let carteraAcumBaseLabel = baseLabel;
-
-  if(kpiMode === 'month'){
-    const curYm = kpiMonthYm || DATA.generated_current_month;
-    const [cy, cm] = curYm.split('-').map(Number);
-    carteraAcumCur = carteraVigenteAcumuladaHastaMes(cy, cm);
-
-    if(kpiBase === 'same_last_year'){
-      carteraAcumPrev = carteraVigenteAcumuladaHastaMes(cy - 1, cm);
-      carteraAcumBaseLabel = 'vs acumulado ' + labelMonthShort((cy - 1) + '-' + String(cm).padStart(2,'0'));
-    } else if(kpiBase === 'prev_year_total'){
-      carteraAcumPrev = metricsForYear(cy - 1).cartera_vigente || 0;
-      carteraAcumBaseLabel = 'vs acumulado ' + (cy - 1);
-    } else if(kpiBase === 'year_avg'){
-      // Para esta base se mantiene la comparación seleccionada por el usuario.
-      carteraAcumPrev = prev.cartera_vigente || 0;
-      carteraAcumBaseLabel = baseLabel;
-    } else {
-      let pm = cm - 1, py = cy;
-      if(pm < 1){ pm = 12; py--; }
-      carteraAcumPrev = carteraVigenteAcumuladaHastaMes(py, pm);
-      carteraAcumBaseLabel = 'vs acumulado ' + labelMonthShort(py + '-' + String(pm).padStart(2,'0'));
-    }
-  } else if(kpiMode === 'year'){
-    const cy = Number(kpiYear) || new Date().getFullYear();
-    const py = Number(kpiYearBase) || (cy - 1);
-    carteraAcumCur = metricsForYear(cy).cartera_vigente || 0;
-    carteraAcumPrev = metricsForYear(py).cartera_vigente || 0;
-    carteraAcumBaseLabel = 'vs acumulado ' + py;
-  } else if(kpiMode === 'day'){
-    const day = kpiDay || toISODate(new Date());
-    const prevDay = kpiDayBase || shiftDateISO(day, -1);
-    carteraAcumCur = carteraVigenteAcumuladaRangoHasta(day);
-    carteraAcumPrev = carteraVigenteAcumuladaRangoHasta(prevDay);
-    carteraAcumBaseLabel = 'vs acumulado ' + fmtISO_es(prevDay);
-  } else if(kpiMode === 'week'){
-    let mon = parseFullDate(kpiWeek) || mondayOf(new Date());
-    mon = mondayOf(mon);
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    const sunISO = toISODate(sun);
-
-    let baseMon = parseFullDate(kpiWeekBase) || new Date(mon.getTime() - 7*86400000);
-    baseMon = mondayOf(baseMon);
-    const baseSun = new Date(baseMon); baseSun.setDate(baseMon.getDate() + 6);
-    const baseSunISO = toISODate(baseSun);
-
-    carteraAcumCur = carteraVigenteAcumuladaRangoHasta(sunISO);
-    carteraAcumPrev = carteraVigenteAcumuladaRangoHasta(baseSunISO);
-    carteraAcumBaseLabel = 'vs acumulado ' + fmtISO_es(baseSunISO);
-  }
+  // Cartera vigente destacada = acumulado TOTAL constante.
+  // Ignora ejecutivo, período, comparación y cualquier otro filtro.
+  const carteraAcumCur = carteraVigenteTotalConstante();
 
   featured.innerHTML = `
     <div class="kpi-featured-card" style="grid-template-columns:1fr;">
