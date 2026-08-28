@@ -397,6 +397,81 @@ select#execFilter:focus-visible{
   .filterbar .filter-tag{ margin-left:0; }
 
   /* ---------- KPI STRIP ---------- */
+  .kpi-featured{
+    margin-top:14px;
+  }
+  .kpi-featured-card{
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:16px;
+    box-shadow:var(--shadow);
+    padding:22px 28px;
+    position:relative;
+    overflow:hidden;
+    min-width:0;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:20px 32px;
+  }
+  .kpi-featured-card::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:5px;
+    background:var(--teal);
+  }
+  .kpi-featured-main{
+    min-width:0;
+  }
+  .kpi-featured-label{
+    font-size:12px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.075em;
+    color:var(--ink-soft);
+    margin:0 0 8px;
+  }
+  .kpi-featured-value{
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    font-size:clamp(32px,4vw,48px);
+    line-height:1;
+    letter-spacing:-.02em;
+    color:var(--ink);
+    font-variant-numeric:tabular-nums;
+    overflow-wrap:anywhere;
+  }
+  .kpi-featured-meta{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    justify-content:center;
+    min-width:150px;
+  }
+  .kpi-featured-meta .kpi-delta{
+    font-size:12.5px;
+    padding:5px 10px;
+  }
+  .kpi-featured-meta .kpi-sub{
+    margin-top:8px;
+    text-align:right;
+    font-size:12px;
+  }
+  @media (max-width:700px){
+    .kpi-featured-card{
+      grid-template-columns:1fr;
+      padding:20px 22px;
+    }
+    .kpi-featured-meta{
+      align-items:flex-start;
+      min-width:0;
+    }
+    .kpi-featured-meta .kpi-sub{
+      text-align:left;
+    }
+  }
+
   .kpi-grid{
     display:grid;
     grid-template-columns:repeat(4, minmax(0, 1fr));
@@ -1295,6 +1370,11 @@ select#execFilter:focus-visible{
 
     <span class="kpi-period-tag" id="kpiPeriodTag">—</span>
   </div>
+
+  <div class="kpi-featured" id="kpiFeatured" aria-label="KPI destacado de cartera vigente">
+    <!-- filled by JS -->
+  </div>
+
   <div class="kpi-grid" id="kpiGrid" aria-label="Indicadores clave">
     <!-- filled by JS -->
   </div>
@@ -3431,7 +3511,8 @@ function setupKpiControls(){
 
 function renderKpis(){
   const el = document.getElementById('kpiGrid');
-  if(!el || !DATA) return;
+  const featured = document.getElementById('kpiFeatured');
+  if(!el || !featured || !DATA) return;
 
   setupKpiControls();
 
@@ -3502,6 +3583,21 @@ function renderKpis(){
   const tag = document.getElementById('kpiPeriodTag');
   if(tag) tag.textContent = tagText;
 
+  const carteraDelta = pctDelta(cur.cartera_vigente || 0, prev.cartera_vigente || 0);
+
+  featured.innerHTML = `
+    <div class="kpi-featured-card">
+      <div class="kpi-featured-main">
+        <div class="kpi-featured-label">Cartera vigente</div>
+        <div class="kpi-featured-value">${fmtCLP(cur.cartera_vigente || 0)}</div>
+      </div>
+      <div class="kpi-featured-meta">
+        <span class="kpi-delta ${carteraDelta.cls}">${carteraDelta.arrow} ${carteraDelta.text}</span>
+        <span class="kpi-sub">${baseLabel}</span>
+      </div>
+    </div>
+  `;
+
   const items = [
     {
       tone: '', label: 'Clientes activos',
@@ -3516,9 +3612,9 @@ function renderKpis(){
       sub: baseLabel
     },
     {
-      tone: '', label: 'Cartera vigente',
-      value: fmtCLP(cur.cartera_vigente || 0),
-      delta: pctDelta(cur.cartera_vigente || 0, prev.cartera_vigente || 0),
+      tone: '', label: 'Diferencia de precio',
+      value: fmtCLP(cur.dif_precio || 0),
+      delta: pctDelta(cur.dif_precio || 0, prev.dif_precio || 0),
       sub: baseLabel
     },
     {
