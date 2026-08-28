@@ -2165,9 +2165,25 @@ function buildMetas(rows){
       operaciones:      Number(r['meta_operaciones']) || 0,
       monto_fin:        Number(r['meta_monto_anticipo']) || 0,
       dif_precio:       Number(r['meta_dif_precio']) || 0,
-      comisiones:       (r['metas_comisones'] !== undefined && String(r['metas_comisones']).trim() !== '')
-                          ? Number(r['metas_comisones'])
-                          : null
+      // Meta de Comisiones:
+      // nombre principal solicitado: metas_comisones
+      // compatibilidad con meta_comisiones por si la hoja conserva ese encabezado.
+      comisiones: (() => {
+        const raw =
+          (r['metas_comisones'] !== undefined && String(r['metas_comisones']).trim() !== '')
+            ? r['metas_comisones']
+            : (
+                (r['meta_comisiones'] !== undefined && String(r['meta_comisiones']).trim() !== '')
+                  ? r['meta_comisiones']
+                  : null
+              );
+
+        if(raw === null) return null;
+
+        // Soporta metas con puntos de miles o formato numérico simple.
+        const n = toNum(raw);
+        return Number.isFinite(n) ? n : null;
+      })()
     };
   });
   return map;
