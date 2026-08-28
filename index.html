@@ -2165,8 +2165,8 @@ function buildMetas(rows){
       operaciones:      Number(r['meta_operaciones']) || 0,
       monto_fin:        Number(r['meta_monto_anticipo']) || 0,
       dif_precio:       Number(r['meta_dif_precio']) || 0,
-      comisiones:       (r['meta_comisiones'] !== undefined && String(r['meta_comisiones']).trim() !== '')
-                          ? Number(r['meta_comisiones'])
+      comisiones:       (r['metas_comisones'] !== undefined && String(r['metas_comisones']).trim() !== '')
+                          ? Number(r['metas_comisones'])
                           : null
     };
   });
