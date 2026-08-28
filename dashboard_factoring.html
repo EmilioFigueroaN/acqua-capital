@@ -3659,17 +3659,11 @@ function renderKpis(){
     carteraAcumBaseLabel = 'vs acumulado ' + fmtISO_es(baseSunISO);
   }
 
-  const carteraDelta = pctDelta(carteraAcumCur, carteraAcumPrev);
-
   featured.innerHTML = `
-    <div class="kpi-featured-card">
+    <div class="kpi-featured-card" style="grid-template-columns:1fr;">
       <div class="kpi-featured-main">
         <div class="kpi-featured-label">Cartera vigente acumulada</div>
         <div class="kpi-featured-value">${fmtCLP(carteraAcumCur)}</div>
-      </div>
-      <div class="kpi-featured-meta">
-        <span class="kpi-delta ${carteraDelta.cls}">${carteraDelta.arrow} ${carteraDelta.text}</span>
-        <span class="kpi-sub">${carteraAcumBaseLabel}</span>
       </div>
     </div>
   `;
