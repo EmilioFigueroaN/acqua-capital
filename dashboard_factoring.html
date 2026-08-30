@@ -1551,7 +1551,7 @@ select#execFilter:focus-visible{
   </section>
 
 <section class="block" id="secMora">
-    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Aging de mora</h2></div>
+    <div class="sec-head"><span class="sec-num" aria-hidden="true"></span><h2 class="sec-title">Aging de mora y excedente</h2></div>
     <p class="sec-desc">Distribución de la cartera según días de atraso. <b>Vigente:</b> facturas sin mora. Tramos de mora: 0–15, 15–30, 31–60 y más de 60 días. <b>Monto</b> corresponde a (55) Monto vigente, <b>% de la cartera</b> es la participación de cada tramo sobre la cartera total e <b>Interés mora</b> corresponde a (68) Interes Mora × Monto vigente.</p>
     <div class="ctx-bar" id="ctxMora">
       <span class="ctx-pill" id="ctxMoraPill">—</span>
@@ -1588,6 +1588,30 @@ select#execFilter:focus-visible{
       </div>
       <div class="mora-actions">
         <button type="button" id="btnDownloadMora" class="btn-refresh" title="Descargar el desglose de mora en CSV">⬇ Descargar mora (CSV)</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 18px;margin-bottom:12px;">
+        <div>
+          <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Excedentes por empresa</h3>
+          <p style="font-size:12px;color:var(--ink-soft);margin:0;">Detalle por empresa usando <b>(26) Empresa solicitante</b>, el estado de <b>(17) Excedentes</b> y el monto de <b>(32) Monto retenido (garantía)</b>.</p>
+        </div>
+        <div style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label for="factExcedenteFilter" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Estado excedente</label>
+          <select id="factExcedenteFilter" style="font-family:'Inter',sans-serif;font-size:13.5px;font-weight:600;padding:7px 32px 7px 11px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer;">
+            <option value="ALL">Todos</option>
+            <option value="Disponible">Disponible</option>
+            <option value="No generado">No generado</option>
+            <option value="Entregado">Entregado</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table id="tbl-excedente-retenido"></table>
+      </div>
+      <div class="chart-download-row">
+        <button type="button" id="btnDownloadExcedentes" class="btn-refresh" title="Descargar las filas visibles de excedentes en CSV">⬇ Descargar excedentes (CSV)</button>
       </div>
     </div>
   </section>
@@ -1673,30 +1697,6 @@ select#execFilter:focus-visible{
       <button type="button" id="btnDownloadFacturas" class="btn-refresh" title="Descargar esta tabla de facturas en un archivo Excel/CSV">⬇ Descargar Facturas nuevas (CSV)</button>
     </div>
     <div class="notes" id="notesFacturas"></div>
-
-    <div class="card" style="margin-top:18px;">
-      <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 18px;margin-bottom:12px;">
-        <div>
-          <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Excedentes por empresa</h3>
-          <p style="font-size:12px;color:var(--ink-soft);margin:0;">Detalle por empresa usando <b>(26) Empresa solicitante</b>, el estado de <b>(17) Excedentes</b> y el monto de <b>(32) Monto retenido (garantía)</b>.</p>
-        </div>
-        <div style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <label for="factExcedenteFilter" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Estado excedente</label>
-          <select id="factExcedenteFilter" style="font-family:'Inter',sans-serif;font-size:13.5px;font-weight:600;padding:7px 32px 7px 11px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer;">
-            <option value="ALL">Todos</option>
-            <option value="Disponible">Disponible</option>
-            <option value="No generado">No generado</option>
-            <option value="Entregado">Entregado</option>
-          </select>
-        </div>
-      </div>
-      <div class="table-scroll">
-        <table id="tbl-excedente-retenido"></table>
-      </div>
-      <div class="chart-download-row">
-        <button type="button" id="btnDownloadExcedentes" class="btn-refresh" title="Descargar las filas visibles de excedentes en CSV">⬇ Descargar excedentes (CSV)</button>
-      </div>
-    </div>
 
     <div class="card" style="margin-top:18px;">
       <h3 style="font-family:Fraunces,serif;font-size:16px;margin:0 0 4px;color:var(--ink);">Detalle de facturas (oportunidades)</h3>
