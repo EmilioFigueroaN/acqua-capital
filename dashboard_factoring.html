@@ -3487,7 +3487,7 @@ function availableKpiYears(){
   return Array.from(years).sort((a,b) => b-a);
 }
 
-/** Métricas entre dos fechas (inclusive) usando (47) Fecha transacción / Fecha creación del maestro. */
+/** Métricas entre dos fechas (inclusive) usando exclusivamente (47) Fecha creación del maestro para día/semana. */
 function metricsForDateRange(fromStr, toStr){
   const t = emptyMetrics();
   if(!masterRowsCache || !masterRowsCache.length) return t;
@@ -5198,19 +5198,67 @@ function parseFullDate(val){
   if(val == null || val === '') return null;
   const s = String(val).trim();
   let m;
-  if((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))){
-    const mo = parseInt(m[1],10), d = parseInt(m[2],10), y = parseInt(m[3],10);
-    if(mo > 12) return new Date(y, d - 1, mo);
-    return new Date(y, mo - 1, d);
-  }
+
+  // ISO: YYYY-MM-DD
   if((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))){
-    return new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    return new Date(
+      parseInt(m[1],10),
+      parseInt(m[2],10) - 1,
+      parseInt(m[3],10)
+    );
   }
+
+  // Formato del maestro chileno: DD-MM-YYYY
   if((m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/))){
-    return new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10));
+    return new Date(
+      parseInt(m[3],10),
+      parseInt(m[2],10) - 1,
+      parseInt(m[1],10)
+    );
   }
+
+  // Formato actual de (47) Fecha creación: DD-MM-YY
+  // Ejemplo: 02-09-26 = 2 de septiembre de 2026.
+  if((m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2})(?:\D|$)/))){
+    const dd = parseInt(m[1],10);
+    const mm = parseInt(m[2],10);
+    const yy = parseInt(m[3],10);
+    const yyyy = yy >= 70 ? 1900 + yy : 2000 + yy;
+
+    const d = new Date(yyyy, mm - 1, dd);
+
+    // Evitar aceptar fechas inválidas como 31-02-26.
+    if(
+      d.getFullYear() === yyyy &&
+      d.getMonth() === mm - 1 &&
+      d.getDate() === dd
+    ){
+      return d;
+    }
+    return null;
+  }
+
+  // DD/MM/YYYY
+  if((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))){
+    const dd = parseInt(m[1],10);
+    const mm = parseInt(m[2],10);
+    const yyyy = parseInt(m[3],10);
+    return new Date(yyyy, mm - 1, dd);
+  }
+
+  // DD/MM/YY
+  if((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\D|$)/))){
+    const dd = parseInt(m[1],10);
+    const mm = parseInt(m[2],10);
+    const yy = parseInt(m[3],10);
+    const yyyy = yy >= 70 ? 1900 + yy : 2000 + yy;
+    return new Date(yyyy, mm - 1, dd);
+  }
+
+  // Último recurso para otros formatos.
   const t = Date.parse(s);
   if(!isNaN(t)) return new Date(t);
+
   return null;
 }
 
