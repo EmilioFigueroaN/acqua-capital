@@ -2412,7 +2412,11 @@ function resolveMasterSchema(rows){
     abonoPyme: findMasterHeader(keys, [/^\(10\)\s*Abono\s*pyme/i, /^Abono\s*pyme$/i, /Abono\s*pyme/i], null),
     colocadoMes: findMasterHeader(keys, [/^\(23\).*Colocado\s*mes/i, /Colocado\s*mes/i], null),
     clienteNuevoMes: findMasterHeader(keys, [/^\(24\).*Cliente\s*nuevo/i, /Cliente\s*nuevo/i], null),
-    fechaCreacion: findMasterHeader(keys, [/^\(47\).*Fecha\s*creaci[oó]n/i, /Fecha\s*creaci[oó]n/i], '(47)Fecha creacion'),
+    fechaCreacion: findMasterHeader(keys, [
+      /^\(47\).*Fecha\s*(?:creaci[oó]n|transacci[oó]n)/i,
+      /Fecha\s*creaci[oó]n/i,
+      /Fecha\s*transacci[oó]n/i
+    ], null),
     interes: findMasterHeader(keys, [/^\(41\).*Inter[eé]s/i, /^Inter[eé]s$/i, /Inter[eé]s/i], null),
     tasaInteresMensual: findMasterHeader(keys, [/^\(40\).*Tasa\s*inter[eé]s\s*mensual/i, /Tasa\s*inter[eé]s\s*mensual/i], null),
     montoAFinanciar: findMasterHeader(keys, [/^\(33\).*Monto\s*a\s*financiar/i, /^Monto\s*a\s*financiar$/i, /Monto\s*a\s*financiar/i], null),
@@ -2454,7 +2458,7 @@ function masterDeclaredNewYM(row, schema){
 /**
  * Período de CLIENTES ACTIVOS.
  * Se alinea con los demás KPI mensuales:
- * primero usa (23) Colocado mes y, si viene vacío, usa (47) Fecha creación.
+ * primero usa (23) Colocado mes y, si viene vacío, usa (47) Fecha transacción/creación.
  */
 function masterActiveClientYM(row, schema){
   if(!row || !schema) return null;
@@ -3329,6 +3333,8 @@ function metricsForMonthRaw(ym, execOverride = null){
   if(!ym || !masterRowsCache.length) return emptyMetrics();
 
   const schema = resolveMasterSchema(masterRowsCache);
+  if(!schema.fechaCreacion) return t;
+
   const firstMap = buildClientFirstOpMap();
   const t = emptyMetrics();
   const seen = {};
@@ -3481,7 +3487,7 @@ function availableKpiYears(){
   return Array.from(years).sort((a,b) => b-a);
 }
 
-/** Métricas entre dos fechas (inclusive) sobre Fecha creación del maestro. */
+/** Métricas entre dos fechas (inclusive) usando (47) Fecha transacción / Fecha creación del maestro. */
 function metricsForDateRange(fromStr, toStr){
   const t = emptyMetrics();
   if(!masterRowsCache || !masterRowsCache.length) return t;
@@ -3508,7 +3514,7 @@ function metricsForDateRange(fromStr, toStr){
       seen[cli] = true;
       t.clientes_nuevos += 1;
     }
-    // El rango ya está filtrado por (47) Fecha creación; para cliente activo
+    // El rango ya está filtrado por (47) Fecha transacción/creación; para cliente activo
     // además se exige (33) Monto a financiar > 0.
     if(cli && masterIsActiveClientRow(r, schema) && !seenActive[cli]){
       seenActive[cli] = true;
