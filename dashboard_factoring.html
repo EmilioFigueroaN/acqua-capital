@@ -2453,12 +2453,12 @@ function masterDeclaredNewYM(row, schema){
 
 /**
  * Período de CLIENTES ACTIVOS.
- * Para este indicador la fecha válida es exclusivamente (47) Fecha creación,
- * que corresponde a la fecha de la transacción. No se usa (23) Colocado mes.
+ * Se alinea con los demás KPI mensuales:
+ * primero usa (23) Colocado mes y, si viene vacío, usa (47) Fecha creación.
  */
 function masterActiveClientYM(row, schema){
-  if(!row || !schema || !schema.fechaCreacion) return null;
-  return parseYM(row[schema.fechaCreacion]);
+  if(!row || !schema) return null;
+  return masterPeriodYM(row, schema);
 }
 
 /**
@@ -2729,7 +2729,7 @@ function buildData(masterRows, facturaRows, selectedYear){
     notes.push('Monto anticipo (KPI): corresponde directamente a la suma de (33) Monto a financiar.');
     if(colMontoVigente) notes.push('Cartera vigente destacada: acumulado total de (55) Monto vigente para el ejecutivo seleccionado. No depende de mes, año, semana, día ni comparación. Se incluyen valores positivos, cero y negativos.');
     notes.push('Cliente nuevo: se usa (24) Cliente nuevo (YYYY-MM) y se cuenta una sola vez por empresa; en archivos antiguos se infiere desde la primera operación.');
-    notes.push('Clientes activos: Empresa solicitante distinta con (33) Monto a financiar mayor que $0; este criterio es independiente del Monto anticipo y el período se determina con (47) Fecha creación.');
+    notes.push('Clientes activos: Empresa solicitante distinta con (33) Monto a financiar mayor que $0; el período mensual se determina con (23) Colocado mes y, si falta, con (47) Fecha creación.');
     if(colGastoOp) notes.push('Comisiones (KPI): (36) Gasto operación (sin IVA) + (60) Gasto legal Comisión RC (sin IVA), sin usar otras columnas como reemplazo.');
     if(colTasaInteresMensual && schema.montoAFinanciar) notes.push('Tasa promedio ponderada: Σ[(40) Tasa interés mensual × (33) Monto a financiar] ÷ Σ[(33) Monto a financiar].');
   } else {
@@ -3345,8 +3345,8 @@ function metricsForMonthRaw(ym, execOverride = null){
 
     const cli = String(r[schema.cliente] || '').trim();
 
-    // Clientes activos usa (47) Fecha creación y exige (33) Monto a financiar > 0.
-    // Se evalúa antes del filtro de (23) Colocado mes usado por otros indicadores.
+    // Clientes activos usa el período operativo ((23) Colocado mes, fallback (47))
+    // y exige (33) Monto a financiar > 0.
     if(cli && masterActiveClientYM(r, schema) === ym && masterIsActiveClientRow(r, schema) && !seenActive[cli]){
       seenActive[cli] = true;
       t.clientes_activos += 1;
@@ -3388,7 +3388,7 @@ function metricsForMonthRaw(ym, execOverride = null){
 
 /**
  * Métricas anuales preservando la lógica vigente del dashboard:
- * - Clientes activos: empresa con (33) Monto a financiar > 0 y año de (47) Fecha creación.
+ * - Clientes activos: empresa con (33) Monto a financiar > 0 y año del período operativo ((23), fallback (47)).
  * - Resto de KPI: año del período operativo resuelto por masterPeriodYM().
  * - Clientes activos y nuevos se cuentan como clientes únicos dentro del año.
  */
@@ -3408,7 +3408,7 @@ function metricsForYear(year){
 
     const cli = String(r[schema.cliente] || '').trim();
 
-    // Clientes activos: fecha (47) Fecha creación y (33) Monto a financiar > 0.
+    // Clientes activos: período operativo ((23), fallback (47)) y (33) Monto a financiar > 0.
     const activeYm = masterActiveClientYM(r, schema);
     const activeYear = activeYm ? Number(activeYm.slice(0,4)) : NaN;
     if(cli && activeYear === y && masterIsActiveClientRow(r, schema) && !seenActive[cli]){
