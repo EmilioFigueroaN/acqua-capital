@@ -400,7 +400,7 @@ select#execFilter:focus-visible{
   .kpi-featured{
     margin-top:14px;
     display:grid;
-    grid-template-columns:minmax(0, 2fr) minmax(290px, .9fr);
+    grid-template-columns:minmax(0, 1.7fr) minmax(180px, .6fr) minmax(250px, .85fr);
     gap:14px;
     align-items:stretch;
   }
@@ -461,6 +461,34 @@ select#execFilter:focus-visible{
     margin-top:8px;
     text-align:right;
     font-size:12px;
+  }
+  .clientes-unicos-card{
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:16px;
+    box-shadow:var(--shadow);
+    padding:20px 22px;
+    position:relative;
+    overflow:hidden;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:10px;
+  }
+  .clientes-unicos-card::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:5px;
+    background:var(--acqua);
+  }
+  .clientes-unicos-card .kpi-featured-value{
+    font-size:clamp(32px,3vw,44px);
+  }
+  .clientes-unicos-desc{
+    font-size:11px;
+    color:var(--ink-soft);
   }
   .enrolados-card{
     background:var(--white);
@@ -2414,6 +2442,7 @@ function resolveMasterSchema(rows){
     keys,
     exec: findMasterHeader(keys, [/^\(29\)\s*Ejecutivo/i, /\(\d+\)\s*Ejecutivo/i, /^Ejecutivo$/i, /Ejecutivo/i], 'Ejecutivo'),
     cliente: findMasterHeader(keys, [/^\(26\).*Empresa\s*solicitante/i, /Empresa\s*solicitante/i], '(26)Empresa solicitante'),
+    rutCedente: findMasterHeader(keys, [/^\(25\)\s*Rut\s*Cedente/i, /Rut\s*Cedente/i, /Rut\s*(?:cliente|solicitante)/i], null),
     deudor: findMasterHeader(keys, [/^\(28\).*Empresa\s*deudora/i, /Empresa\s*deudora/i], '(28)Empresa deudora'),
     abonoPyme: findMasterHeader(keys, [/^\(10\)\s*Abono\s*pyme/i, /^Abono\s*pyme$/i, /Abono\s*pyme/i], null),
     colocadoMes: findMasterHeader(keys, [/^\(23\).*Colocado\s*mes/i, /Colocado\s*mes/i], null),
@@ -3756,6 +3785,30 @@ function setupKpiControls(){
   }
 }
 
+/** Total acumulado de clientes cedentes distintos por RUT.
+ * Mismas condiciones temporales que Cartera vigente: ningún filtro de fecha.
+ * Se respeta solo el filtro general de ejecutivo (y el rol que lo restringe).
+ */
+function clientesCedentesRutUnicosAcumulados(){
+  const rows = masterRowsCache || [];
+  if(!rows.length) return 0;
+  const schema = resolveMasterSchema(rows);
+  if(!schema.rutCedente) return 0;
+
+  const ejecutivo = String(currentExec || 'ALL').trim();
+  const rutUnicos = new Set();
+  rows.forEach(r => {
+    if(ejecutivo !== 'ALL'){
+      const execFila = schema.exec ? String(r[schema.exec] || '').trim() : '';
+      if(execFila !== ejecutivo) return;
+    }
+    // Un mismo RUT con distinto uso de puntos/guion/espacios cuenta una vez.
+    const rut = String(r[schema.rutCedente] ?? '').toUpperCase().replace(/[^0-9K]/g, '');
+    if(rut) rutUnicos.add(rut);
+  });
+  return rutUnicos.size;
+}
+
 function carteraVigenteTotalConstante(){
   const rows = masterRowsCache || [];
   if(!rows.length) return 0;
@@ -3855,6 +3908,7 @@ function renderKpis(){
   // Cartera vigente destacada = acumulado TOTAL constante.
   // Ignora ejecutivo, período, comparación y cualquier otro filtro.
   const carteraAcumCur = carteraVigenteTotalConstante();
+  const totalClientesUnicos = clientesCedentesRutUnicosAcumulados();
 
   const enrolados = buildEnroladosStats(reporteEmpresasRowsCache);
   const enroladosDisponible = reporteEmpresasRowsCache.length > 0;
@@ -3866,6 +3920,12 @@ function renderKpis(){
         <div class="kpi-featured-value">${fmtCLP(carteraAcumCur)}</div>
       </div>
     </div>
+
+    <aside class="clientes-unicos-card" aria-label="Clientes cedentes únicos acumulados">
+      <div class="kpi-featured-label">Clientes únicos</div>
+      <div class="kpi-featured-value">${fmtInt(totalClientesUnicos)}</div>
+      <div class="clientes-unicos-desc">RUT cedentes distintos · acumulado</div>
+    </aside>
 
     <aside class="enrolados-card" aria-label="Resumen de empresas enroladas">
       <div class="enrolados-head">
