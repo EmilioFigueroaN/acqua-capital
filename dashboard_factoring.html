@@ -655,6 +655,7 @@ select#execFilter:focus-visible{
     background:#e7efe9; border:1px solid #c5dcf0; padding:5px 11px; border-radius:20px;
   }
   .kpi-grid{ margin-top:12px; }
+  @media (min-width:901px){ .kpi-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
 
   /* ---------- INSIGHTS + CONCENTRATION ---------- */
   .intel-stack{
@@ -1947,7 +1948,8 @@ function renumberVisibleSections(){
 
 /**
  * Cartera vendida es una vista exclusiva de gerencia.
- * Además de ocultar el bloque, evita cargar/retener sus filas en sesiones de ejecutivo.
+ * Además de ocultar el bloque, evita retener sus filas detalladas en sesiones de ejecutivo.
+ * El nuevo KPI solo conserva importe, fecha y ejecutivo atribuido.
  */
 function applyRoleVisibility(){
   const sec = document.getElementById('secCarteraVendida');
@@ -2056,6 +2058,8 @@ function logout(){
   currentExec = 'ALL';
   DATA = null;
   carteraVendidaRowsCache = [];
+  carteraVendidaKpiRowsCache = [];
+  carteraVendidaKpiLoaded = false;
   carteraVendidaLoadError = '';
   showLogin('');
   document.getElementById('loginNombre').value = '';
@@ -2139,6 +2143,8 @@ let masterRowsCache = [];
 let facturaRowsCache = [];
 let metasRowsCache = [];
 let carteraVendidaRowsCache = [];
+let carteraVendidaKpiRowsCache = []; // solo importe, fecha y ejecutivo asignado; no contiene cartera detallada
+let carteraVendidaKpiLoaded = false;
 let reporteEmpresasRowsCache = [];
 let reporteEmpresasLoadError = '';
 let carteraVendidaLoadError = '';
@@ -3893,6 +3899,8 @@ function renderKpis(){
     </aside>
   `;
 
+  const cvKpiValues = carteraVendidaKpiLoaded ? cvKpiComparedValues() : null;
+
   const items = [
     {
       tone: '', label: 'Clientes activos',
@@ -3943,6 +3951,12 @@ function renderKpis(){
       value: fmtCLP(ticketCur),
       delta: pctDelta(ticketCur, ticketPrev),
       sub: baseLabel
+    },
+    {
+      tone: 'acqua', label: 'Gastos más intereses',
+      value: cvKpiValues ? fmtCLP(cvKpiValues[0]) : '—',
+      delta: cvKpiValues ? pctDelta(cvKpiValues[0],cvKpiValues[1]) : {cls:'flat',arrow:'•',text:'sin datos'},
+      sub: cvKpiValues ? baseLabel : 'Cartera vendida no disponible'
     }
   ];
 
@@ -5064,6 +5078,110 @@ function cvCanonicalizeRows(rows){
   return (rows || []).map(cvCanonicalizeRow);
 }
 
+/**
+ * El archivo Cartera vendida no tiene columna de ejecutivo.
+ * Vincular por RUT cedente + folio con el maestro, siempre que identifique
+ * a un único ejecutivo. No asignar arbitrariamente los registros ambiguos.
+ * El KPI utiliza Fecha curse operación (no vencimiento ni fecha de pago).
+ */
+function buildCarteraVendidaKpiRows(rawRows){
+  const master = masterRowsCache || [];
+  const schema = resolveMasterSchema(master);
+  const mKeys = master.length ? Object.keys(master[0]) : [];
+  const colFolio = findMasterHeader(mKeys, [/^\(3\)\s*Folio/i, /^Folio$/i], null);
+  const colRut = findMasterHeader(mKeys, [/^\(25\)\s*Rut\s*Cedente/i, /Rut\s*Cedente/i], null);
+  const folioKey = v => cvNorm(v).replace(/\.0+$/,'').replace(/^0+(?=\d)/,'');
+  const docKey = v => cvKey(v);
+  const byInvoice = new Map();
+
+  if(colFolio && colRut && schema.exec){
+    master.forEach(r => {
+      const folio = folioKey(r[colFolio]);
+      const rut = docKey(r[colRut]);
+      const exec = cvNorm(r[schema.exec]);
+      if(!folio || !rut || !exec) return;
+      const key = rut + '|' + folio;
+      if(!byInvoice.has(key)) byInvoice.set(key,new Set());
+      byInvoice.get(key).add(exec);
+    });
+  }
+
+  return cvCanonicalizeRows(rawRows).map(r => {
+    const rut = docKey(r['RUT Cliente']);
+    const folio = folioKey(r['Folio']);
+    const matches = byInvoice.get(rut + '|' + folio);
+    const exec = matches && matches.size === 1 ? [...matches][0] : null;
+    const fecha = cvDate(r['Fecha Curse Operación']);
+    return {
+      fecha: fecha && !isNaN(fecha.getTime()) ? toISODate(fecha) : null,
+      exec,
+      importe: cvNum(r['Gastos']) + cvNum(r['Interés'])
+    };
+  });
+}
+
+function cvKpiSumRange(fromISO,toISO){
+  const selected = cvNorm(currentExec || 'ALL');
+  return carteraVendidaKpiRowsCache.reduce((sum,r)=>{
+    if(selected !== 'ALL' && r.exec !== selected) return sum;
+    if(!r.fecha || (fromISO && r.fecha < fromISO) || (toISO && r.fecha > toISO)) return sum;
+    return sum + r.importe;
+  },0);
+}
+
+function cvKpiSumMonth(ym){
+  if(!ym) return 0;
+  const [y,m] = ym.split('-').map(Number);
+  const last = new Date(y,m,0).getDate();
+  return cvKpiSumRange(ym+'-01',ym+'-'+String(last).padStart(2,'0'));
+}
+
+function cvKpiSumYear(year){
+  return cvKpiSumRange(year+'-01-01',year+'-12-31');
+}
+
+function cvKpiYearAverage(year){
+  // Mismas bases de meses con actividad usadas por yearAverageMetrics().
+  // Incluye meses que tengan operaciones en Cartera vendida aunque el
+  // master no tenga operaciones asignadas en ese mes.
+  let total=0,months=0;
+  for(let m=1;m<=12;m++){
+    const ym=year+'-'+String(m).padStart(2,'0');
+    const v=cvKpiSumMonth(ym);
+    const op=metricsForMonthRaw(ym);
+    if(op.operaciones>0 || op.monto_fin>0 || v!==0){total+=v;months++;}
+  }
+  return months ? total/months : 0;
+}
+
+function cvKpiComparedValues(){
+  if(kpiMode==='day'){
+    const d=kpiDay || toISODate(new Date());
+    const b=kpiDayBase || shiftDateISO(d,-1);
+    return [cvKpiSumRange(d,d),cvKpiSumRange(b,b)];
+  }
+  if(kpiMode==='week'){
+    const mon=mondayOf(parseFullDate(kpiWeek)||new Date());
+    const bmon=mondayOf(parseFullDate(kpiWeekBase)||new Date(mon.getTime()-7*86400000));
+    const end=new Date(mon);end.setDate(mon.getDate()+6);
+    const bend=new Date(bmon);bend.setDate(bmon.getDate()+6);
+    return [cvKpiSumRange(toISODate(mon),toISODate(end)),cvKpiSumRange(toISODate(bmon),toISODate(bend))];
+  }
+  if(kpiMode==='year'){
+    const y=Number(kpiYear)||new Date().getFullYear();
+    const b=Number(kpiYearBase)||(y-1);
+    return [cvKpiSumYear(y),cvKpiSumYear(b)];
+  }
+  const ym=kpiMonthYm || DATA.generated_current_month;
+  const [y,m]=ym.split('-').map(Number);
+  const cur=cvKpiSumMonth(ym);
+  if(kpiBase==='same_last_year') return [cur,cvKpiSumMonth((y-1)+'-'+String(m).padStart(2,'0'))];
+  if(kpiBase==='year_avg') return [cur,cvKpiYearAverage(y)];
+  if(kpiBase==='prev_year_total') return [cur,cvKpiYearAverage(y-1)];
+  const p=new Date(y,m-2,1);
+  return [cur,cvKpiSumMonth(p.getFullYear()+'-'+String(p.getMonth()+1).padStart(2,'0'))];
+}
+
 function cvStatusClass(v){
   const s = cvNorm(v).toLowerCase();
   if(s === 'vigente') return 'vigente';
@@ -5991,25 +6109,29 @@ async function loadFromCSV(){
     masterRowsCache = masterRows;
     facturaRowsCache = facturaRows;
 
-    // Cartera vendida: fuente exclusiva de gerencia.
-    // Las sesiones de ejecutivo no solicitan ni retienen esta información.
+    // Fuente vendida para el KPI de todos los roles: retener solo resúmenes
+    // fecha / ejecutivo atribuido / (Gastos + Interés).
+    // La tabla detallada de Cartera vendida permanece exclusiva de gerencia.
     carteraVendidaLoadError = '';
-    if(isGerente()){
-      try{
-        const cvResult = await fetchCarteraVendidaText(controller.signal);
-        const tcv = cvResult.text;
-        const parsedCv = parseCSV(tcv);
-        if(parsedCv.length){
-          carteraVendidaRowsCache = cvCanonicalizeRows(parsedCv);
-          csvFingerprints.carteraVendida = simpleHash(tcv);
-          carteraVendidaLoadError = '';
-        }
-      } catch(e){
-        carteraVendidaLoadError = e && e.message ? e.message : String(e);
-        console.warn('No se pudo leer cartera vendida; se usa respaldo:', e);
-      }
-    } else {
-      carteraVendidaRowsCache = [];
+    carteraVendidaKpiLoaded = false;
+    carteraVendidaKpiRowsCache = [];
+    try{
+      const cvResult = await fetchCarteraVendidaText(controller.signal);
+      const tcv = cvResult.text;
+      const parsedCv = parseCSV(tcv);
+      carteraVendidaKpiRowsCache = buildCarteraVendidaKpiRows(parsedCv);
+      carteraVendidaKpiLoaded = true;
+      csvFingerprints.carteraVendida = simpleHash(tcv);
+      if(isGerente()) carteraVendidaRowsCache = cvCanonicalizeRows(parsedCv);
+      else carteraVendidaRowsCache = [];
+    } catch(e){
+      carteraVendidaLoadError = e && e.message ? e.message : String(e);
+      if(isGerente()){
+        carteraVendidaRowsCache = cvCanonicalizeRows(CARTERA_VENDIDA_FALLBACK.slice());
+        carteraVendidaKpiRowsCache = buildCarteraVendidaKpiRows(carteraVendidaRowsCache);
+        carteraVendidaKpiLoaded = true;
+      } else carteraVendidaRowsCache = [];
+      console.warn('No se pudo leer Cartera vendida:', e);
     }
 
     // Reporte Empresas: fuente opcional para la viñeta "Enrolados".
@@ -6155,7 +6277,7 @@ async function checkCsvUpdates(silent){
       fetchTextNoCache(CSV_TAREAS).catch(() => null),
       fetchTextNoCache(CSV_USERS).catch(() => null),
       fetchTextNoCache(CSV_METAS).catch(() => null),
-      isGerente() ? fetchCarteraVendidaText().then(r => r.text).catch(() => null) : Promise.resolve(null),
+      fetchCarteraVendidaText().then(r => r.text).catch(() => null),
       fetchReporteEmpresasText().then(r => r.text).catch(() => null)
     ]);
 
@@ -6191,7 +6313,7 @@ async function checkCsvUpdates(silent){
       if(csvFingerprints.metas && csvFingerprints.metas !== h) changedMetas = true;
       csvFingerprints.metas = h;
     }
-    if(isGerente() && tCarteraVendida != null){
+    if(tCarteraVendida != null){
       const h = simpleHash(tCarteraVendida);
       if(csvFingerprints.carteraVendida && csvFingerprints.carteraVendida !== h) changedCarteraVendida = true;
       csvFingerprints.carteraVendida = h;
@@ -6264,14 +6386,19 @@ async function checkCsvUpdates(silent){
           'ok'
         );
       }
-    } else if(isGerente() && changedCarteraVendida){
-      if(tCarteraVendida != null){
-        const parsedCv = parseCSV(tCarteraVendida);
-        if(parsedCv.length) carteraVendidaRowsCache = cvCanonicalizeRows(parsedCv);
-        carteraVendidaLoadError = '';
-        if(DATA) renderCarteraVendida();
-        setStatus('Cartera vendida actualizada · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
-      }
+    }
+
+    // Cartera vendida se actualiza también si cambiaron tareas, metas o
+    // Reporte Empresas en la misma revisión (sin perder su fingerprint).
+    if(changedCarteraVendida && !changedOps && tCarteraVendida != null){
+      const parsedCv = parseCSV(tCarteraVendida);
+      carteraVendidaKpiRowsCache = buildCarteraVendidaKpiRows(parsedCv);
+      carteraVendidaKpiLoaded = true;
+      if(isGerente()) carteraVendidaRowsCache = cvCanonicalizeRows(parsedCv);
+      else carteraVendidaRowsCache = [];
+      carteraVendidaLoadError = '';
+      if(DATA){renderKpis();if(isGerente())renderCarteraVendida();}
+      setStatus('Gastos e intereses actualizados · ' + new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}), 'ok');
     }
   } catch(e){
     console.warn('Auto-refresh CSV:', e);
